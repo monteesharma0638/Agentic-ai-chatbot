@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { existsSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -5,7 +6,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import type { MfAgent } from '../agent/agent.js';
 import { ChatBodySchema, type AgentEvent, type ChatUser } from '../agent/types.js';
 import { signUserToken, verifyUserToken } from '../auth/userToken.js';
-import type { AppConfig } from '../config.js';
+import { isProduction, type AppConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import type { McpHub } from '../mcp/hub.js';
 import { conversationKey, type ConversationStore } from '../store/conversations.js';
@@ -145,7 +146,9 @@ export function createApp(deps: {
     await hub.listTools().catch(() => undefined);
     const servers = hub.status();
     const ok = servers.every((s) => s.connected);
-    res.status(ok ? 200 : 503).json({ status: ok ? 'ok' : 'degraded', model: config.GEMINI_MODEL, mcp: servers });
+    res
+      .status(ok ? 200 : 503)
+      .json({ status: ok ? 'ok' : 'degraded', model: config.GEMINI_MODEL, store: store.kind, mcp: servers });
   });
 
   app.post('/api/chat/stream', identify, async (req, res) => {
@@ -246,16 +249,34 @@ export function createApp(deps: {
 
   // ---------- development playground ----------
   if (config.ENABLE_PLAYGROUND) {
+    const password = config.PLAYGROUND_PASSWORD ? Buffer.from(config.PLAYGROUND_PASSWORD) : null;
+    /** Browser login (HTTP Basic, any username) when PLAYGROUND_PASSWORD is set. */
+    const playgroundAuth = (req: Request, res: Response, next: NextFunction) => {
+      if (!password) return next();
+      const [scheme, encoded] = (req.headers.authorization ?? '').split(' ');
+      const given = scheme === 'Basic' && encoded ? Buffer.from(encoded, 'base64').toString().split(':').slice(1).join(':') : '';
+      const actual = Buffer.from(given);
+      if (actual.length === password.length && timingSafeEqual(actual, password)) return next();
+      res.setHeader('WWW-Authenticate', 'Basic realm="MF Chat Playground", charset="UTF-8"');
+      res.status(401).send('Playground password required.');
+    };
+
     app.get('/', (_req, res) => res.redirect('/playground'));
-    app.get('/playground', (_req, res) => res.sendFile(PLAYGROUND_FILE));
-    /** Mints a signed user token exactly like the Blade snippet does. Dev only. */
-    app.get('/dev/token', (req, res) => {
+    app.get('/playground', playgroundAuth, (_req, res) => res.sendFile(PLAYGROUND_FILE));
+    /** Mints a signed user token exactly like the Blade snippet does, for testing. */
+    app.get('/dev/token', playgroundAuth, (req, res) => {
       if (!config.WIDGET_TOKEN_SECRET) return void res.json({ token: null, note: 'WIDGET_TOKEN_SECRET not set; guest mode only' });
       const uid = String(req.query.uid ?? 'demo-user').slice(0, 64);
       const name = req.query.name ? String(req.query.name).slice(0, 60) : undefined;
       res.json({ token: signUserToken({ uid, name, exp: Math.floor(Date.now() / 1000) + 12 * 3600 }, config.WIDGET_TOKEN_SECRET) });
     });
-    log.info(`Playground enabled at http://${config.HOST}:${config.PORT}/playground`);
+    log.info(`Playground enabled at /playground${password ? ' (password protected)' : ''}`);
+    if (!password && isProduction(config)) {
+      log.warn(
+        'The playground is public on this production deployment: anyone with the URL can chat and create test ' +
+          'logins. Set ENABLE_PLAYGROUND=false (or PLAYGROUND_PASSWORD) before launch.',
+      );
+    }
   }
 
   app.use((_req, res) => res.status(404).json({ error: 'not_found' }));

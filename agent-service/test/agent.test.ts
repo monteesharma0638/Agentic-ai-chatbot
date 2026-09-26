@@ -12,7 +12,13 @@ import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/http/app.js';
 import { McpHub } from '../src/mcp/hub.js';
 import { DemoPortfolioProvider } from '../src/portfolio/providers.js';
-import { createConversationStore, MemoryStore, VercelRuntimeCacheStore } from '../src/store/conversations.js';
+import {
+  createConversationStore,
+  MemoryStore,
+  resolveStore,
+  UpstashStore,
+  VercelRuntimeCacheStore,
+} from '../src/store/conversations.js';
 
 const log = pino({ level: 'silent' });
 
@@ -336,14 +342,109 @@ describe('deployment building blocks (Vercel / VPS)', () => {
     expect(await store.get('k')).toBeNull();
   });
 
+  it('stores conversations in Upstash Redis (REST) with a TTL', async () => {
+    const data = new Map<string, unknown>();
+    const setCalls: unknown[] = [];
+    const fake = {
+      get: async <T>(key: string) => (data.get(key) as T) ?? null,
+      set: async (key: string, value: unknown, opts: { ex: number }) => {
+        setCalls.push(opts);
+        data.set(key, structuredClone(value));
+        return 'OK';
+      },
+      del: async (key: string) => Number(data.delete(key)),
+    };
+    const store = new UpstashStore(fake, 3600);
+    const record = { id: 'c1', userId: '42', contents: [], transcript: [], createdAt: 'x', updatedAt: 'x' };
+    await store.set('k', record);
+    expect(await store.get('k')).toEqual(record);
+    expect(setCalls[0]).toEqual({ ex: 3600 });
+    await store.delete('k');
+    expect(await store.get('k')).toBeNull();
+    expect(store.kind).toBe('upstash');
+  });
+
+  it('detects every Redis variable name the Vercel ⇄ Upstash integration may add', () => {
+    const base = { GEMINI_API_KEY: 'x', ALLOW_ANONYMOUS: 'true', VERCEL: '1' };
+    const kind = (env: Record<string, string>) => resolveStore(loadConfig({ ...base, ...env })).kind;
+    expect(kind({})).toBe('vercel');
+    expect(kind({ KV_REST_API_URL: 'https://x.upstash.io', KV_REST_API_TOKEN: 't' })).toBe('upstash');
+    expect(kind({ UPSTASH_REDIS_REST_URL: 'https://x.upstash.io', UPSTASH_REDIS_REST_TOKEN: 't' })).toBe('upstash');
+    expect(kind({ KV_URL: 'rediss://default:p@x.upstash.io:6379' })).toBe('redis');
+    expect(kind({ REDIS_URL: 'redis://127.0.0.1:6379' })).toBe('redis');
+    expect(kind({ REDIS_URL: '' })).toBe('vercel'); // empty value from a copied .env.example
+    expect(resolveStore(loadConfig({ ...base, KV_URL: 'rediss://k' })).redisUrl).toBe('rediss://k');
+  });
+
+  it('allows a public playground in production, except alongside real portfolio data', () => {
+    const base = { GEMINI_API_KEY: 'x', ALLOW_ANONYMOUS: 'true', VERCEL: '1', VERCEL_ENV: 'production', ENABLE_PLAYGROUND: 'true' };
+    expect(loadConfig(base).ENABLE_PLAYGROUND).toBe(true);
+    expect(loadConfig({ ...base, PORTFOLIO_SOURCE: 'demo' }).ENABLE_PLAYGROUND).toBe(true);
+    const mysql = { ...base, PORTFOLIO_SOURCE: 'mysql' };
+    expect(() => loadConfig(mysql)).toThrow(/any user's portfolio/);
+    expect(loadConfig({ ...mysql, PLAYGROUND_PASSWORD: 'long-enough-password' }).ENABLE_PLAYGROUND).toBe(true);
+    expect(() => loadConfig({ ...base, PLAYGROUND_PASSWORD: 'short' })).toThrow(/12 characters/);
+  });
+
+  it('serves a public playground when no password is set', async () => {
+    const pgConfig = loadConfig({
+      GEMINI_API_KEY: 'x',
+      WIDGET_TOKEN_SECRET: SECRET,
+      VERCEL: '1',
+      VERCEL_ENV: 'production',
+      ENABLE_PLAYGROUND: 'true',
+    });
+    const store = new MemoryStore(60_000);
+    const agent = new MfAgent({ model: new FakeModel([]), hub, store, config: pgConfig, log });
+    const server = createApp({ agent, hub, store, config: pgConfig, log }).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      expect((await fetch(`${url}/playground`)).status).toBe(200);
+      const { token } = (await (await fetch(`${url}/dev/token?uid=1`)).json()) as { token: string };
+      expect(verifyUserToken(token, SECRET).ok).toBe(true);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('protects the playground and test-token endpoint with a browser login', async () => {
+    const pgConfig = loadConfig({
+      GEMINI_API_KEY: 'x',
+      WIDGET_TOKEN_SECRET: SECRET,
+      VERCEL: '1',
+      VERCEL_ENV: 'production',
+      ENABLE_PLAYGROUND: 'true',
+      PLAYGROUND_PASSWORD: 'long-enough-password',
+    });
+    const store = new MemoryStore(60_000);
+    const agent = new MfAgent({ model: new FakeModel([]), hub, store, config: pgConfig, log });
+    const server = createApp({ agent, hub, store, config: pgConfig, log }).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const basic = (pw: string) => ({ Authorization: `Basic ${Buffer.from(`me:${pw}`).toString('base64')}` });
+    try {
+      const noAuth = await fetch(`${url}/playground`);
+      expect(noAuth.status).toBe(401);
+      expect(noAuth.headers.get('www-authenticate')).toContain('Basic');
+      expect((await fetch(`${url}/playground`, { headers: basic('wrong-password-123') })).status).toBe(401);
+      expect((await fetch(`${url}/playground`, { headers: basic('long-enough-password') })).status).toBe(200);
+      expect((await fetch(`${url}/dev/token?uid=1`)).status).toBe(401);
+      const token = (await (await fetch(`${url}/dev/token?uid=1`, { headers: basic('long-enough-password') })).json()) as { token: string };
+      expect(verifyUserToken(token.token, SECRET).ok).toBe(true);
+      expect(((await (await fetch(`${url}/health`)).json()) as { store: string }).store).toBe('memory');
+    } finally {
+      server.close();
+    }
+  });
+
   it('picks the conversation store from the environment', async () => {
     const base = { GEMINI_API_KEY: 'x', ALLOW_ANONYMOUS: 'true' };
     expect(await createConversationStore(loadConfig(base), log)).toBeInstanceOf(MemoryStore);
     expect(await createConversationStore(loadConfig({ ...base, VERCEL: '1' }), log)).toBeInstanceOf(VercelRuntimeCacheStore);
     expect(await createConversationStore(loadConfig({ ...base, VERCEL: '1', CONVERSATION_STORE: 'memory' }), log)).toBeInstanceOf(MemoryStore);
-    // On Vercel, client IPs come from X-Forwarded-For and production follows VERCEL_ENV.
+    // On Vercel, client IPs come from X-Forwarded-For.
     expect(loadConfig({ ...base, VERCEL: '1' }).TRUST_PROXY).toBe('true');
-    expect(() => loadConfig({ ...base, VERCEL_ENV: 'production', ENABLE_PLAYGROUND: 'true' })).toThrow(/production/);
   });
 });
 

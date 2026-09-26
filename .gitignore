@@ -10,3 +10,7 @@ agent-service/public/embed.js.gz
 
 # Vercel CLI
 .vercel
+
+# Env files with real values (e.g. .env.production for Vercel); keep the templates.
+.env.*
+!.env.example

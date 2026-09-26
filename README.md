@@ -129,11 +129,11 @@ Or over HTTP at `http://host:3100/mcp` with `Authorization: Bearer $MCP_AUTH_TOK
 | `ALLOWED_ORIGINS` | — | Your site's origin(s), comma-separated. |
 | `ALLOW_ANONYMOUS` | `false` | Let logged-out visitors chat. |
 | `PORTFOLIO_SOURCE` | `none` | `none`, `demo` or `mysql` (see below). |
-| `REDIS_URL` | — | Conversation store for multiple instances / restarts (in-memory otherwise). |
 | `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_IP_PER_MINUTE` | `20` / `60` | Per user and per IP. |
 | `AGENT_MAX_STEPS`, `TOOL_TIMEOUT_MS`, `HISTORY_MAX_TURNS` | `8`, `45000`, `12` | Agent limits. |
 | `APP_NAME`, `ASSISTANT_NAME` | `MF Invest`, `Fundy` | Used in the system prompt. |
-| `ENABLE_PLAYGROUND` | — | Dev only; refused when `NODE_ENV=production`. |
+| `ENABLE_PLAYGROUND` / `PLAYGROUND_PASSWORD` | — | Test page at `/playground`; the optional password adds a browser login. Turn it off before launch. |
+| `REDIS_URL` / Upstash `KV_*`, `UPSTASH_REDIS_REST_*` | — | Any of these switches chat memory to Redis automatically (`/health` shows the active store). |
 
 More MCP servers can be added in `agent-service/mcp.config.json`: their tools are merged automatically.
 
@@ -174,7 +174,7 @@ The same code deploys to Vercel or to a VPS; the host decides how it runs, and n
 | --- | --- | --- |
 | Entry point | `api/index.js` → one Function | `npm start` / PM2 → two processes |
 | MCP data server | in-process | separate process over HTTP (`mcp.config.json`) |
-| Chat memory | Vercel Runtime Cache (or Redis via `REDIS_URL`) | in-memory (or Redis via `REDIS_URL`) |
+| Chat memory | Vercel Runtime Cache, or Upstash Redis (added from the Storage tab) | in-memory, or Redis via `REDIS_URL` |
 | `embed.js` | Vercel CDN | served by Express |
 | Config | Vercel environment variables | `agent-service/.env`, `mcp-server/.env` |
 

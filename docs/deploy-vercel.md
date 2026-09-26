@@ -56,17 +56,21 @@ Generate a secret for `WIDGET_TOKEN_SECRET` (on your PC):
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-| Variable | Value | Environments |
-| --- | --- | --- |
-| `GEMINI_API_KEY` | your Gemini key | Production, Preview |
-| `WIDGET_TOKEN_SECRET` | the generated secret. Laravel's `MF_CHAT_SECRET` must be identical | Production, Preview |
-| `ALLOWED_ORIGINS` | `https://your-laravel-site.com`. Exact, no trailing slash. Add `,https://www.your-laravel-site.com` if you use www | Production, Preview |
-| `APP_NAME` | your app's name, e.g. `MyFunds` | Production, Preview |
-| `ENABLE_PLAYGROUND` | `true`. Gives you a test page on preview URLs; never set it for Production | **Preview only** |
-| `PORTFOLIO_SOURCE` | `none` for now (see step 9) | Production, Preview |
+Use the same values for **Production, Preview and Development**. The repo's `.env.vercel` (created locally,
+never committed) has them ready to import: **Settings → Environment Variables → Import .env**.
 
-Optional: `ASSISTANT_NAME`, `ALLOW_ANONYMOUS=true` (let logged-out visitors chat), `REDIS_URL` (step 8),
-`GEMINI_MODEL` / `GEMINI_FALLBACK_MODELS`, `LOG_LEVEL`.
+| Variable | Value |
+| --- | --- |
+| `GEMINI_API_KEY` | your Gemini key |
+| `WIDGET_TOKEN_SECRET` | the generated secret. Laravel's `MF_CHAT_SECRET` must be identical |
+| `ALLOWED_ORIGINS` | `https://your-laravel-site.com`. Exact, no trailing slash. Add `,https://www.your-laravel-site.com` if you use www |
+| `APP_NAME` | your app's name, e.g. `MyFunds` |
+| `ASSISTANT_NAME` | the assistant's name, e.g. `Fundy` |
+| `PORTFOLIO_SOURCE` | `none` for now (see step 9) |
+| `ENABLE_PLAYGROUND` | `true` while testing: a public test page at `/playground` (see "Using the playground"). Set `false` before launch |
+
+Optional: `PLAYGROUND_PASSWORD` (12+ characters; puts a browser login on the playground), `ALLOW_ANONYMOUS=true` (let logged-out visitors chat), `GEMINI_MODEL` / `GEMINI_FALLBACK_MODELS`,
+`LOG_LEVEL`. Redis variables are added by the Upstash integration (step 8); don't type them yourself.
 
 **Don't set these on Vercel:**
 - `NODE_ENV`: setting it to `production` makes npm skip the build tools and the build fails. The app
@@ -85,7 +89,8 @@ Click **Deploy**. The build runs `npm ci` and `npm run build` and takes 1–2 mi
 https://<your-project>.vercel.app/health
 ```
 
-Expected: `{"status":"ok",…,"mcp":[{"name":"india-mf","connected":true,"tools":14}]}`.
+Expected: `{"status":"ok",…,"store":"vercel","mcp":[{"name":"india-mf","connected":true,"tools":14}]}`.
+(`store` becomes `upstash` after step 8.)
 If it shows `startup_failed`, open **Logs** in the project; it's almost always a missing environment variable.
 
 ## 5. Use your own domain (makes a later move to a VPS a DNS-only change)
@@ -118,20 +123,27 @@ Project → **Firewall** → **Configure** → **New Rule** (names may differ sl
 - **If:** Request Path **starts with** `/api/chat`
 - **Then:** **Rate Limit**, for example **30 requests per 60 seconds per IP**, then deny (429).
 
-Leave **Deployment Protection** at the default (**Standard Protection**). That locks preview URLs behind your
-Vercel login, which is what makes the preview playground safe. Production must stay public, because your
-Laravel visitors' browsers call it.
+Leave **Deployment Protection** at the default (**Standard Protection**), which locks preview URLs behind your
+Vercel login. Production must stay public, because your Laravel visitors' browsers call it.
 
-## 8. (Optional) Chat memory that's never evicted: Redis
+## 8. Chat memory that's never evicted: Redis (recommended)
 
-By default, conversations are kept in **Vercel Runtime Cache**: shared by all instances, 24-hour expiry,
-nothing to set up. It can drop old entries when full, so a long-idle chat may forget its earlier messages.
-If that matters to you:
+Without Redis, conversations are kept in **Vercel Runtime Cache**: shared by all instances, 24-hour expiry,
+nothing to set up, but it can drop old entries when full. Redis keeps every chat for its full 24 hours.
 
-1. Project → **Storage** (or the Vercel Marketplace) → add **Upstash Redis** and connect it to this project.
-2. Make sure there's a `REDIS_URL` environment variable with the `rediss://…` connection string. Copy it from
-   the Upstash integration if it wasn't added automatically.
-3. Redeploy. The logs show `Conversation store: Redis`.
+1. Project → **Storage** → **Create Database** (or **Browse Marketplace**) → choose **Upstash** → **Redis**.
+2. **Region:** pick **Mumbai (ap-south-1)** if offered, to sit next to the function (`bom1`). The free plan is
+   plenty to start with.
+3. **Connect** it to this project with **all environments** ticked (Production, Preview, Development).
+   Upstash adds its variables automatically, for example `KV_REST_API_URL` / `KV_REST_API_TOKEN` or
+   `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`, sometimes also `KV_URL` / `REDIS_URL`. The app detects
+   any of them, so you don't need to rename or copy anything.
+4. **Redeploy** (Deployments → ⋯ → Redeploy); new variables only apply to new deployments.
+5. Check `https://chat.yourdomain.com/health`: it should now say `"store":"upstash"` (or `"redis"`).
+
+Production and Preview then share this Redis database. Chats never mix between them because every entry is
+keyed by user and conversation id. If you'd rather keep them apart, create a second database and connect it
+to Preview only.
 
 ## 9. "My portfolio" answers: best left for the VPS
 
@@ -146,11 +158,23 @@ If you still want it on Vercel, set the `PORTFOLIO_*` variables exactly as descr
 [deploy-vps.md, step 11](deploy-vps.md#11-optional-how-is-my-portfolio-doing-from-your-laravel-database), and add
 `?ssl={"rejectUnauthorized":true}` to `PORTFOLIO_DB_URL`.
 
-## Testing on a preview deployment
+## Using the playground
 
-Every branch or pull request you push gets its own preview URL. With `ENABLE_PLAYGROUND=true` set for
-Preview, open `https://<preview-url>/playground` (Vercel asks you to log in first). You can chat there
-without Laravel.
+With `ENABLE_PLAYGROUND=true`, open:
+
+```
+https://chat.yourdomain.com/playground
+```
+
+You can chat there without Laravel. It works on preview URLs too; Vercel asks for your Vercel login there first.
+
+- Add `?settings=1` to the address to show the settings panel (user id, name, fund-page context, guest mode).
+- To switch the playground off, set `ENABLE_PLAYGROUND=false` and redeploy.
+- **It's public:** anyone who finds the URL can chat (using your Gemini quota) and create test logins for any
+  user id. That's fine while only a few testers know the URL. Before launch, set `ENABLE_PLAYGROUND=false`,
+  or add `PLAYGROUND_PASSWORD` to put a login in front of it. The logs warn about this on every start.
+- It won't start together with `PORTFOLIO_SOURCE=mysql` unless `PLAYGROUND_PASSWORD` is set; otherwise
+  anyone could view any user's real holdings.
 
 ## Updating
 
@@ -182,6 +206,8 @@ Laravel keeps using `https://chat.yourdomain.com` and needs no changes.
 | --- | --- |
 | Build fails at `tsc` or `esbuild: not found` | `NODE_ENV=production` is set in Vercel; remove it. |
 | `/health` shows `startup_failed` | A required variable is missing. See **Logs** for the exact message. |
+| `startup_failed` right after enabling the playground | `PLAYGROUND_PASSWORD` is shorter than 12 characters, or the playground is on without a password while `PORTFOLIO_SOURCE=mysql`. |
+| `/health` still shows `"store":"vercel"` after adding Upstash | Redeploy; variables only reach new deployments. Check that Upstash is connected to that environment. |
 | Widget shows "Your session has expired" | Laravel `MF_CHAT_SECRET` ≠ Vercel `WIDGET_TOKEN_SECRET`. Fix, redeploy, `php artisan config:clear`. |
 | Browser console: `403` / `origin_not_allowed` | `ALLOWED_ORIGINS` doesn't exactly match the Laravel site address (https, www, no trailing slash). Redeploy after changing it. |
 | Widget can't load, or requests fail on a preview URL | Preview URLs are login-protected; use the production domain from Laravel. |

@@ -56,9 +56,19 @@ const EnvSchema = z.object({
   /** Optional JSON override of the MCP config file (handy in containers). */
   MCP_SERVERS: z.string().optional(),
 
-  /** auto = Redis if REDIS_URL is set, Vercel Runtime Cache on Vercel, otherwise in-memory. */
-  CONVERSATION_STORE: z.enum(['auto', 'memory', 'redis', 'vercel']).default('auto'),
+  /**
+   * auto = Upstash Redis (REST) if its credentials are set, else Redis over TCP if REDIS_URL / KV_URL is set,
+   * else Vercel Runtime Cache on Vercel, otherwise in-memory.
+   */
+  CONVERSATION_STORE: z.enum(['auto', 'memory', 'redis', 'upstash', 'vercel']).default('auto'),
+  /** Redis over TCP, e.g. redis://127.0.0.1:6379 (VPS) or rediss://… (Upstash). */
   REDIS_URL: z.string().optional(),
+  /** Names the Vercel ⇄ Upstash integration may add; picked up automatically. */
+  KV_URL: z.string().optional(),
+  KV_REST_API_URL: z.string().optional(),
+  KV_REST_API_TOKEN: z.string().optional(),
+  UPSTASH_REDIS_REST_URL: z.string().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
   CONVERSATION_TTL_HOURS: z.coerce.number().default(24),
   /** Past user turns sent to the model. Older turns are dropped. */
   HISTORY_MAX_TURNS: z.coerce.number().int().default(12),
@@ -72,6 +82,8 @@ const EnvSchema = z.object({
   APP_NAME: z.string().default('MF Invest'),
   ASSISTANT_NAME: z.string().default('Fundy'),
   ENABLE_PLAYGROUND: bool,
+  /** Protects /playground and /dev/token with a browser login (any username). Required in production. */
+  PLAYGROUND_PASSWORD: z.string().optional(),
 
   /** none | demo | mysql — source of the signed-in user's holdings for "my portfolio" questions. */
   PORTFOLIO_SOURCE: z.enum(['none', 'demo', 'mysql']).default('none'),
@@ -109,8 +121,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (!cfg.WIDGET_TOKEN_SECRET && !cfg.ALLOW_ANONYMOUS) {
     throw new Error('Set WIDGET_TOKEN_SECRET (signed-in users) and/or ALLOW_ANONYMOUS=true (guests).');
   }
-  if (isProduction(cfg) && cfg.ENABLE_PLAYGROUND) {
-    throw new Error('ENABLE_PLAYGROUND must be off in production (it can mint test tokens).');
+  if (cfg.PLAYGROUND_PASSWORD !== undefined && cfg.PLAYGROUND_PASSWORD.length > 0 && cfg.PLAYGROUND_PASSWORD.length < 12) {
+    throw new Error('PLAYGROUND_PASSWORD must be at least 12 characters.');
+  }
+  // A public playground can mint a login token for any user id: never combine it with real portfolio data.
+  if (isProduction(cfg) && cfg.ENABLE_PLAYGROUND && !cfg.PLAYGROUND_PASSWORD && cfg.PORTFOLIO_SOURCE === 'mysql') {
+    throw new Error(
+      'A playground without PLAYGROUND_PASSWORD would let anyone view any user\'s portfolio. ' +
+        'Set PLAYGROUND_PASSWORD, turn the playground off, or use PORTFOLIO_SOURCE=none/demo.',
+    );
   }
   return cfg;
 }
