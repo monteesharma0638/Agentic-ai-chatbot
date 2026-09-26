@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci --include=dev",
+  "buildCommand": "npm run build",
+  "outputDirectory": "agent-service/public",
+  "regions": ["bom1"],
+  "functions": {
+    "api/index.js": { "maxDuration": 120 }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "headers": [
+    {
+      "source": "/embed.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=300" },
+        { "key": "Cross-Origin-Resource-Policy", "value": "cross-origin" }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import type { ConversationRecord } from '../agent/types.js';
+import type { AppConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 
 export interface ConversationStore {
@@ -73,5 +74,71 @@ export class RedisStore implements ConversationStore {
 
   async close(): Promise<void> {
     await this.redis.quit();
+  }
+}
+
+/** The subset of Vercel's RuntimeCache used here (lets tests pass a fake). */
+export interface KeyValueCache {
+  get(key: string): Promise<unknown>;
+  set(key: string, value: unknown, options?: { ttl?: number; name?: string }): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
+/**
+ * Vercel Runtime Cache: shared by every function instance in a region, with a
+ * TTL and nothing to set up. Entries can be evicted early when the cache is
+ * full, so a long-idle chat may lose its earlier context. Use Redis
+ * (REDIS_URL) if conversations must be kept reliably.
+ */
+export class VercelRuntimeCacheStore implements ConversationStore {
+  constructor(
+    private readonly cache: KeyValueCache,
+    private readonly ttlSeconds: number,
+  ) {}
+
+  static async create(ttlMs: number, log: Logger): Promise<VercelRuntimeCacheStore> {
+    const { getCache } = await import('@vercel/functions');
+    log.info('Conversation store: Vercel Runtime Cache');
+    return new VercelRuntimeCacheStore(getCache({ namespace: 'mfchat' }), Math.ceil(ttlMs / 1000));
+  }
+
+  async get(key: string): Promise<ConversationRecord | null> {
+    return ((await this.cache.get(key)) as ConversationRecord | null | undefined) ?? null;
+  }
+
+  async set(key: string, record: ConversationRecord): Promise<void> {
+    // A fixed name keeps user ids out of Vercel's cache observability.
+    await this.cache.set(key, record, { ttl: this.ttlSeconds, name: 'conversation' });
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.cache.delete(key);
+  }
+}
+
+/**
+ * Picks the store from CONVERSATION_STORE. "auto" means: Redis when REDIS_URL
+ * is set, Vercel Runtime Cache when running on Vercel, otherwise memory.
+ */
+export async function createConversationStore(config: AppConfig, log: Logger): Promise<ConversationStore> {
+  const ttlMs = config.CONVERSATION_TTL_HOURS * 3_600_000;
+  const kind =
+    config.CONVERSATION_STORE === 'auto'
+      ? config.REDIS_URL
+        ? 'redis'
+        : config.VERCEL
+          ? 'vercel'
+          : 'memory'
+      : config.CONVERSATION_STORE;
+
+  switch (kind) {
+    case 'redis':
+      if (!config.REDIS_URL) throw new Error('CONVERSATION_STORE=redis requires REDIS_URL');
+      return RedisStore.connect(config.REDIS_URL, ttlMs, log);
+    case 'vercel':
+      return VercelRuntimeCacheStore.create(ttlMs, log);
+    default:
+      log.info('Conversation store: in-memory (lost on restart; set REDIS_URL to persist)');
+      return new MemoryStore(ttlMs);
   }
 }

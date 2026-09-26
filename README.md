@@ -35,6 +35,8 @@ see [`laravel-embed/README.md`](laravel-embed/README.md).
 | [`agent-service/`](agent-service) | Express API, Gemini agent loop, MCP client, auth, rate limits, conversation store, serves `embed.js`. |
 | [`widget/`](widget) | Chat UI (vanilla JS, Shadow DOM), bundled into `agent-service/public/embed.js`. |
 | [`laravel-embed/`](laravel-embed) | The Blade snippet and 4-step guide for your Laravel app. |
+| `api/index.js`, `vercel.json` | Vercel deployment (one function, MCP server in-process). Not used on a VPS. |
+| [`docs/`](docs) | Step-by-step deployment guides: [Vercel](docs/deploy-vercel.md) and [VPS](docs/deploy-vps.md). |
 
 **Why Node.js:** it's the language you know best, and the official SDKs used here are
 first-class in TypeScript: `@google/genai` for Gemini and `@modelcontextprotocol/sdk` for MCP.
@@ -166,34 +168,18 @@ access, and only single `SELECT` statements are accepted.
 
 ## Deployment
 
-**DigitalOcean, step by step:** [`docs/deploy-digitalocean.md`](docs/deploy-digitalocean.md). It covers the
-Droplet, Node, PM2, nginx, free SSL, Redis, the MySQL portfolio and updates.
+The same code deploys to Vercel or to a VPS; the host decides how it runs, and no code changes are needed to switch.
 
-**PM2 + nginx** (simplest for a Node developer):
+| | Vercel ([guide](docs/deploy-vercel.md)) | VPS: DigitalOcean, Lightsail, Hetzner… ([guide](docs/deploy-vps.md)) |
+| --- | --- | --- |
+| Entry point | `api/index.js` → one Function | `npm start` / PM2 → two processes |
+| MCP data server | in-process | separate process over HTTP (`mcp.config.json`) |
+| Chat memory | Vercel Runtime Cache (or Redis via `REDIS_URL`) | in-memory (or Redis via `REDIS_URL`) |
+| `embed.js` | Vercel CDN | served by Express |
+| Config | Vercel environment variables | `agent-service/.env`, `mcp-server/.env` |
 
-```bash
-npm ci && npm run build
-pm2 start ecosystem.config.cjs && pm2 save
-```
-
-In `agent-service/.env`: `NODE_ENV=production`, `ENABLE_PLAYGROUND=false`, `TRUST_PROXY=1`,
-`ALLOWED_ORIGINS=https://app.yourdomain.com`, and ideally `REDIS_URL`. Put nginx in front of port 3000
-with streaming enabled:
-
-```nginx
-server {
-  server_name chat.yourdomain.com;
-  location / {
-    proxy_pass http://127.0.0.1:3000;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_buffering off;          # required for streaming replies
-    proxy_read_timeout 180s;
-  }
-}
-```
+Serve it from your own domain (`chat.yourdomain.com`) from day one; moving hosts is then only a DNS change,
+and Laravel keeps the same `MF_CHAT_URL`.
 
 **Docker:** `docker compose up --build` runs the MCP server, agent and Redis (see `docker-compose.yml`).
 

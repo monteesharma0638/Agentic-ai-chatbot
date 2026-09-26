@@ -17,6 +17,12 @@ const ServerSchema = z.discriminatedUnion('transport', [
     allowTools: z.array(z.string()).optional(),
   }),
   z.object({
+    // Runs the bundled India MF MCP server inside this process (single-function hosts such as Vercel).
+    name: z.string(),
+    transport: z.literal('inprocess'),
+    allowTools: z.array(z.string()).optional(),
+  }),
+  z.object({
     name: z.string(),
     transport: z.literal('stdio'),
     command: z.string(),
@@ -75,8 +81,21 @@ class Connection {
     return this.client !== null;
   }
 
-  private createTransport(): Transport {
+  private async createTransport(): Promise<Transport> {
     const c = this.config;
+    if (c.transport === 'inprocess') {
+      const [{ InMemoryTransport }, mf] = await Promise.all([
+        import('@modelcontextprotocol/sdk/inMemory.js'),
+        // Relative path, not the workspace package name: Vercel's bundler drops workspace
+        // symlinks from node_modules, but keeps this file at the same relative location.
+        import('../../../mcp-server/dist/server.js'),
+      ]);
+      const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+      await mf.createMfServer().connect(serverSide);
+      // Start downloading the AMFI scheme list now so the first question is fast.
+      mf.repository.directory.get().catch((err: Error) => this.log.warn({ err: err.message }, 'AMFI warm-up failed'));
+      return clientSide;
+    }
     if (c.transport === 'http') {
       return new StreamableHTTPClientTransport(new URL(c.url), { requestInit: { headers: c.headers ?? {} } });
     }
@@ -96,7 +115,7 @@ class Connection {
       client.onclose = () => {
         this.client = null;
       };
-      await client.connect(this.createTransport());
+      await client.connect(await this.createTransport());
       const { tools } = await client.listTools();
       const allow = this.config.allowTools;
       this.tools = allow ? tools.filter((t) => allow.includes(t.name)) : tools;

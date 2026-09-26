@@ -1,4 +1,14 @@
-# Deploy on DigitalOcean (step by step)
+# Deploy on a VPS (step by step)
+
+For any Ubuntu server: DigitalOcean, AWS Lightsail, Hetzner, Hostinger VPS and so on. DigitalOcean screens
+are used as the example. The same code also runs on Vercel ([deploy-vercel.md](deploy-vercel.md)); nothing
+in the code needs to change when you move.
+
+> **Moving from Vercel?** Follow steps 1–13, but in step 2 **change** the existing `chat` DNS record (a CNAME
+> pointing at Vercel) into an A record pointing at the VPS. Copy your environment variables from the Vercel
+> dashboard into `agent-service/.env` (step 6). Laravel needs no changes because it keeps using
+> `https://chat.yourdomain.com`. When the VPS is live, remove the domain from the Vercel project.
+> Open conversations aren't carried over; users simply start a new chat.
 
 What you'll end up with:
 
@@ -10,21 +20,22 @@ Laravel page ──HTTPS──▶ chat.yourdomain.com (nginx + free SSL)
 ```
 
 - **Time:** about 40 minutes.
-- **Cost:** $12/month (2 GB Droplet).
+- **Cost:** about $6–12/month (a 1–2 GB server).
 
 Replace these placeholders everywhere below:
 
 | Placeholder | Example |
 | --- | --- |
 | `chat.yourdomain.com` | the subdomain for the chat service |
-| `YOUR_DROPLET_IP` | shown in the DigitalOcean dashboard after step 1 |
+| `YOUR_DROPLET_IP` | the server's public IP address, shown by your provider after step 1 |
 | `https://your-laravel-site.com` | the address your Laravel app is served from |
 
 ---
 
-## 1. Create the Droplet
+## 1. Create the server
 
-In the DigitalOcean dashboard, go to **Create → Droplets**:
+Any provider works if you choose **Ubuntu 24.04 LTS**, **1–2 GB RAM**, an **India region** if available,
+and **SSH-key login**. For DigitalOcean, go to **Create → Droplets**:
 
 1. **Region:** Bangalore (BLR1). If your Laravel app or MySQL database is already on DigitalOcean,
    pick **the same region** and the same VPC so the chat can reach the database privately.

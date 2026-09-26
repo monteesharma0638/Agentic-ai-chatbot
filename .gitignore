@@ -7,3 +7,6 @@ coverage/
 # Built by `npm run build -w widget`
 agent-service/public/embed.js
 agent-service/public/embed.js.gz
+
+# Vercel CLI
+.vercel

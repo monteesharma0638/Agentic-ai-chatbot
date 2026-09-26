@@ -12,12 +12,12 @@
     "build": "npm run build -w widget && npm run build -w mcp-server && npm run build -w agent-service",
     "dev": "concurrently -k -n mcp,agent,widget -c cyan,magenta,yellow \"npm run dev -w mcp-server\" \"npm run dev -w agent-service\" \"npm run dev -w widget\"",
     "start": "concurrently -k -n mcp,agent -c cyan,magenta \"npm start -w mcp-server\" \"npm start -w agent-service\"",
-    "test": "npm test -w mcp-server && npm test -w agent-service",
-    "typecheck": "npm run typecheck -w mcp-server && npm run typecheck -w agent-service",
+    "test": "npm run build -w mcp-server && npm test -w mcp-server && npm test -w agent-service",
+    "typecheck": "npm run build -w mcp-server && npm run typecheck -w mcp-server && npm run typecheck -w agent-service",
     "smoke": "npm run smoke -w mcp-server"
   },
   "engines": {
-    "node": ">=20.12"
+    "node": "24.x"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

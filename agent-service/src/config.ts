@@ -33,6 +33,10 @@ const EnvSchema = z.object({
   /** Express "trust proxy" setting; set to 1 behind nginx / a load balancer so client IPs are correct. */
   TRUST_PROXY: z.string().default('loopback'),
 
+  /** Set automatically by Vercel ("1") and its environment name (production / preview / development). */
+  VERCEL: bool,
+  VERCEL_ENV: z.string().optional(),
+
   GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY is required (https://aistudio.google.com/apikey)'),
   /** Flash-Lite: lowest latency and the most generous free-tier quota. */
   GEMINI_MODEL: z.string().default('gemini-3.5-flash-lite'),
@@ -52,6 +56,8 @@ const EnvSchema = z.object({
   /** Optional JSON override of the MCP config file (handy in containers). */
   MCP_SERVERS: z.string().optional(),
 
+  /** auto = Redis if REDIS_URL is set, Vercel Runtime Cache on Vercel, otherwise in-memory. */
+  CONVERSATION_STORE: z.enum(['auto', 'memory', 'redis', 'vercel']).default('auto'),
   REDIS_URL: z.string().optional(),
   CONVERSATION_TTL_HOURS: z.coerce.number().default(24),
   /** Past user turns sent to the model. Older turns are dropped. */
@@ -76,10 +82,21 @@ const EnvSchema = z.object({
 
 export type AppConfig = z.infer<typeof EnvSchema>;
 
+/**
+ * Production on a VPS (NODE_ENV=production) or on Vercel's production environment.
+ * On Vercel, don't set NODE_ENV=production yourself: npm would then skip the
+ * dev dependencies the build needs.
+ */
+export function isProduction(cfg: Pick<AppConfig, 'NODE_ENV' | 'VERCEL_ENV'>): boolean {
+  return cfg.NODE_ENV === 'production' || cfg.VERCEL_ENV === 'production';
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
-  // Older .env files used a single GEMINI_FALLBACK_MODEL.
   const source = { ...env };
+  // Older .env files used a single GEMINI_FALLBACK_MODEL.
   if (!source.GEMINI_FALLBACK_MODELS && source.GEMINI_FALLBACK_MODEL) source.GEMINI_FALLBACK_MODELS = source.GEMINI_FALLBACK_MODEL;
+  // Vercel's edge sets X-Forwarded-For/Proto; trust it so rate limits see real client IPs.
+  if (source.VERCEL && !source.TRUST_PROXY) source.TRUST_PROXY = 'true';
   const parsed = EnvSchema.safeParse(source);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
@@ -92,7 +109,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (!cfg.WIDGET_TOKEN_SECRET && !cfg.ALLOW_ANONYMOUS) {
     throw new Error('Set WIDGET_TOKEN_SECRET (signed-in users) and/or ALLOW_ANONYMOUS=true (guests).');
   }
-  if (cfg.NODE_ENV === 'production' && cfg.ENABLE_PLAYGROUND) {
+  if (isProduction(cfg) && cfg.ENABLE_PLAYGROUND) {
     throw new Error('ENABLE_PLAYGROUND must be off in production (it can mint test tokens).');
   }
   return cfg;

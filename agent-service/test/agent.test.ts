@@ -12,7 +12,7 @@ import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/http/app.js';
 import { McpHub } from '../src/mcp/hub.js';
 import { DemoPortfolioProvider } from '../src/portfolio/providers.js';
-import { MemoryStore } from '../src/store/conversations.js';
+import { createConversationStore, MemoryStore, VercelRuntimeCacheStore } from '../src/store/conversations.js';
 
 const log = pino({ level: 'silent' });
 
@@ -301,6 +301,50 @@ describe('agent loop (fake Gemini + real MCP server)', () => {
     expect(events.find((e) => e.type === 'tool_end')).toMatchObject({ ok: false });
     expect(events.at(-1)!.type).toBe('done');
   }, 30_000);
+});
+
+describe('deployment building blocks (Vercel / VPS)', () => {
+  it('runs the MCP server in-process (single-function deployments)', async () => {
+    const inproc = new McpHub([{ name: 'india-mf', transport: 'inprocess' }], log);
+    await inproc.init();
+    const tools = await inproc.listTools();
+    expect(tools).toHaveLength(14);
+    const res = await inproc.callTool('get_nav_on_date', { fund: 'parag parikh flexi cap', dates: ['2020-03-23'] }, { timeoutMs: 30_000 });
+    expect(res.ok).toBe(true);
+    expect(JSON.stringify(res.data)).toContain('20.2032');
+    await inproc.close();
+  }, 60_000);
+
+  it('stores conversations in a Vercel Runtime Cache with a TTL and no user id in the entry name', async () => {
+    const calls: { key: string; options?: { ttl?: number; name?: string } }[] = [];
+    const data = new Map<string, unknown>();
+    const fakeCache = {
+      get: async (key: string) => data.get(key) ?? null,
+      set: async (key: string, value: unknown, options?: { ttl?: number; name?: string }) => {
+        calls.push({ key, options });
+        data.set(key, structuredClone(value));
+      },
+      delete: async (key: string) => void data.delete(key),
+    };
+    const store = new VercelRuntimeCacheStore(fakeCache, 86_400);
+    const record = { id: 'c1', userId: '42', contents: [], transcript: [], createdAt: 'x', updatedAt: 'x' };
+    expect(await store.get('k')).toBeNull();
+    await store.set('k', record);
+    expect(await store.get('k')).toEqual(record);
+    expect(calls[0].options).toEqual({ ttl: 86_400, name: 'conversation' });
+    await store.delete('k');
+    expect(await store.get('k')).toBeNull();
+  });
+
+  it('picks the conversation store from the environment', async () => {
+    const base = { GEMINI_API_KEY: 'x', ALLOW_ANONYMOUS: 'true' };
+    expect(await createConversationStore(loadConfig(base), log)).toBeInstanceOf(MemoryStore);
+    expect(await createConversationStore(loadConfig({ ...base, VERCEL: '1' }), log)).toBeInstanceOf(VercelRuntimeCacheStore);
+    expect(await createConversationStore(loadConfig({ ...base, VERCEL: '1', CONVERSATION_STORE: 'memory' }), log)).toBeInstanceOf(MemoryStore);
+    // On Vercel, client IPs come from X-Forwarded-For and production follows VERCEL_ENV.
+    expect(loadConfig({ ...base, VERCEL: '1' }).TRUST_PROXY).toBe('true');
+    expect(() => loadConfig({ ...base, VERCEL_ENV: 'production', ENABLE_PLAYGROUND: 'true' })).toThrow(/production/);
+  });
 });
 
 describe('user tokens', () => {

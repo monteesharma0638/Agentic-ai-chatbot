@@ -12,6 +12,8 @@ import { conversationKey, type ConversationStore } from '../store/conversations.
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = resolve(here, '../../public');
+// Literal `new URL(..., import.meta.url)` so Vercel's bundler includes the file in the function.
+const PLAYGROUND_FILE = fileURLToPath(new URL('../../playground/playground.html', import.meta.url));
 const VISITOR_ID = /^[A-Za-z0-9_-]{16,64}$/;
 const CONVERSATION_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -245,7 +247,7 @@ export function createApp(deps: {
   // ---------- development playground ----------
   if (config.ENABLE_PLAYGROUND) {
     app.get('/', (_req, res) => res.redirect('/playground'));
-    app.get('/playground', (_req, res) => res.sendFile(resolve(PUBLIC_DIR, 'playground.html')));
+    app.get('/playground', (_req, res) => res.sendFile(PLAYGROUND_FILE));
     /** Mints a signed user token exactly like the Blade snippet does. Dev only. */
     app.get('/dev/token', (req, res) => {
       if (!config.WIDGET_TOKEN_SECRET) return void res.json({ token: null, note: 'WIDGET_TOKEN_SECRET not set; guest mode only' });
