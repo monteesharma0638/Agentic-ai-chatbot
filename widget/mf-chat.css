@@ -1,0 +1,448 @@
+/* MF Chat widget (rendered inside a Shadow DOM by embed.js). Theme via the custom properties below or data-accent / data-theme. */
+.mfc-root {
+  --mfc-accent: #0b7a5a;
+  --mfc-accent-ink: #ffffff;
+  --mfc-chart-2: #8a94a6;
+  --mfc-bg: #ffffff;
+  --mfc-surface: #f5f7f6;
+  --mfc-border: #e3e8e6;
+  --mfc-text: #16211d;
+  --mfc-muted: #5f6b67;
+  --mfc-user-bg: #0b7a5a;
+  --mfc-user-ink: #ffffff;
+  --mfc-danger: #b42318;
+  --mfc-radius: 14px;
+  --mfc-font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
+  --mfc-shadow: 0 18px 50px rgba(16, 24, 20, 0.18), 0 2px 8px rgba(16, 24, 20, 0.08);
+  font-family: var(--mfc-font);
+  color: var(--mfc-text);
+  font-size: 14px;
+  line-height: 1.5;
+  /* Inherited properties cross the Shadow DOM boundary; reset what host pages commonly set. */
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-align: left;
+  text-indent: 0;
+  text-transform: none;
+  text-shadow: none;
+  white-space: normal;
+  direction: ltr;
+  visibility: visible;
+  cursor: auto;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mfc-root:not([data-theme='light']) {
+    --mfc-accent: #34c197;
+    --mfc-accent-ink: #06231a;
+    --mfc-chart-2: #9aa4b5;
+    --mfc-bg: #121816;
+    --mfc-surface: #1b2320;
+    --mfc-border: #2a3531;
+    --mfc-text: #e7eeeb;
+    --mfc-muted: #9aa8a3;
+    --mfc-user-bg: #1f6b53;
+    --mfc-user-ink: #f2fbf7;
+    --mfc-danger: #ff8a80;
+  }
+}
+.mfc-root[data-theme='dark'] {
+  --mfc-accent: #34c197;
+  --mfc-accent-ink: #06231a;
+  --mfc-bg: #121816;
+  --mfc-surface: #1b2320;
+  --mfc-border: #2a3531;
+  --mfc-text: #e7eeeb;
+  --mfc-muted: #9aa8a3;
+  --mfc-user-bg: #1f6b53;
+  --mfc-user-ink: #f2fbf7;
+}
+
+.mfc-root *,
+.mfc-root *::before,
+.mfc-root *::after {
+  box-sizing: border-box;
+}
+
+/* ---------- layout ---------- */
+.mfc-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--mfc-bg);
+  border: 1px solid var(--mfc-border);
+  border-radius: var(--mfc-radius);
+  overflow: hidden;
+}
+.mfc-inline {
+  height: 100%;
+}
+.mfc-inline .mfc-panel {
+  height: 100%;
+  min-height: 480px;
+}
+.mfc-floating .mfc-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 88px;
+  width: min(420px, calc(100vw - 32px));
+  height: min(640px, calc(100vh - 120px));
+  box-shadow: var(--mfc-shadow);
+  z-index: 2147483000;
+  opacity: 0;
+  transform: translateY(12px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.mfc-floating.mfc-open .mfc-panel {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.mfc-inline .mfc-close {
+  display: none;
+}
+
+.mfc-launcher {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--mfc-accent);
+  color: var(--mfc-accent-ink);
+  box-shadow: var(--mfc-shadow);
+  cursor: pointer;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  transition: transform 0.15s ease;
+}
+.mfc-launcher:hover {
+  transform: translateY(-2px);
+}
+.mfc-launcher svg {
+  width: 26px;
+  height: 26px;
+}
+.mfc-open .mfc-launcher {
+  transform: scale(0.9);
+}
+
+@media (max-width: 520px) {
+  .mfc-floating .mfc-panel {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+}
+
+/* ---------- header ---------- */
+.mfc-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 12px 12px 16px;
+  border-bottom: 1px solid var(--mfc-border);
+}
+.mfc-heading {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.mfc-title {
+  font-size: 15px;
+}
+.mfc-subtitle {
+  color: var(--mfc-muted);
+  font-size: 12px;
+}
+.mfc-icon-btn {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--mfc-muted);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.mfc-icon-btn:hover {
+  background: var(--mfc-surface);
+  color: var(--mfc-text);
+}
+.mfc-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---------- messages ---------- */
+.mfc-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scroll-behavior: smooth;
+}
+.mfc-msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 92%;
+}
+.mfc-user {
+  align-self: flex-end;
+}
+.mfc-assistant {
+  align-self: flex-start;
+  width: 92%;
+}
+.mfc-bubble {
+  padding: 10px 14px;
+  border-radius: var(--mfc-radius);
+  overflow-wrap: anywhere;
+}
+.mfc-user .mfc-bubble {
+  background: var(--mfc-user-bg);
+  color: var(--mfc-user-ink);
+  border-bottom-right-radius: 4px;
+  white-space: pre-wrap;
+}
+.mfc-assistant .mfc-bubble {
+  background: var(--mfc-surface);
+  border-bottom-left-radius: 4px;
+}
+.mfc-assistant .mfc-bubble:empty {
+  display: none;
+}
+.mfc-error .mfc-bubble {
+  color: var(--mfc-danger);
+  border: 1px solid color-mix(in srgb, var(--mfc-danger) 30%, transparent);
+  background: color-mix(in srgb, var(--mfc-danger) 6%, var(--mfc-bg));
+}
+
+/* markdown */
+.mfc-bubble > :first-child {
+  margin-top: 0;
+}
+.mfc-bubble > :last-child {
+  margin-bottom: 0;
+}
+.mfc-bubble p,
+.mfc-bubble ul,
+.mfc-bubble ol {
+  margin: 0 0 8px;
+}
+.mfc-bubble ul,
+.mfc-bubble ol {
+  padding-left: 20px;
+}
+.mfc-bubble h1,
+.mfc-bubble h2,
+.mfc-bubble h3 {
+  font-size: 14px;
+  margin: 10px 0 6px;
+}
+.mfc-bubble a {
+  color: var(--mfc-accent);
+}
+.mfc-bubble code {
+  font-size: 12.5px;
+  background: var(--mfc-bg);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.mfc-bubble table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.mfc-bubble th,
+.mfc-bubble td {
+  border: 1px solid var(--mfc-border);
+  padding: 5px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+.mfc-bubble th {
+  background: var(--mfc-bg);
+  font-weight: 600;
+}
+
+/* tool activity: one status chip, replaced as each step starts */
+.mfc-activity {
+  margin: 0 0 6px;
+}
+.mfc-tool {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--mfc-muted);
+  border: 1px solid var(--mfc-border);
+  border-radius: 999px;
+  padding: 2px 10px 2px 22px;
+  position: relative;
+  animation: mfc-chip-in 0.18s ease-out;
+}
+@keyframes mfc-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+.mfc-tool::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--mfc-accent);
+}
+.mfc-running::before {
+  animation: mfc-pulse 1s ease-in-out infinite;
+}
+@keyframes mfc-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.mfc-pending .mfc-bubble:empty {
+  display: block;
+  width: 48px;
+  height: 36px;
+  background:
+    radial-gradient(circle, var(--mfc-muted) 3px, transparent 4px) 10px 50% / 10px 10px no-repeat,
+    radial-gradient(circle, var(--mfc-muted) 3px, transparent 4px) 20px 50% / 10px 10px no-repeat,
+    radial-gradient(circle, var(--mfc-muted) 3px, transparent 4px) 30px 50% / 10px 10px no-repeat,
+    var(--mfc-surface);
+  animation: mfc-pulse 1.2s ease-in-out infinite;
+}
+
+/* charts */
+.mfc-chart {
+  margin: 8px 0 0;
+  padding: 10px 12px 8px;
+  border: 1px solid var(--mfc-border);
+  border-radius: var(--mfc-radius);
+  background: var(--mfc-bg);
+}
+.mfc-chart figcaption {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 6px;
+}
+.mfc-chart-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.mfc-chart-sub {
+  color: var(--mfc-muted);
+  font-size: 12px;
+}
+.mfc-chart-box {
+  position: relative;
+  height: 180px;
+}
+
+/* empty state */
+.mfc-empty {
+  margin: auto 0;
+  text-align: center;
+}
+.mfc-empty-title {
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.mfc-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mfc-chip {
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--mfc-text);
+  background: var(--mfc-surface);
+  border: 1px solid var(--mfc-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.mfc-chip:hover {
+  border-color: var(--mfc-accent);
+}
+
+/* ---------- composer ---------- */
+.mfc-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px 6px;
+  border-top: 1px solid var(--mfc-border);
+}
+.mfc-input {
+  flex: 1;
+  resize: none;
+  font: inherit;
+  color: var(--mfc-text);
+  background: var(--mfc-surface);
+  border: 1px solid var(--mfc-border);
+  border-radius: 12px;
+  padding: 9px 12px;
+  max-height: 140px;
+  outline: none;
+}
+.mfc-input:focus {
+  border-color: var(--mfc-accent);
+}
+.mfc-send {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--mfc-accent);
+  color: var(--mfc-accent-ink);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.mfc-send svg {
+  width: 18px;
+  height: 18px;
+}
+.mfc-disclaimer {
+  margin: 0;
+  padding: 0 12px 10px;
+  font-size: 11px;
+  color: var(--mfc-muted);
+  text-align: center;
+}
+
+.mfc-root button:focus-visible,
+.mfc-input:focus-visible {
+  outline: 2px solid var(--mfc-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mfc-root * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

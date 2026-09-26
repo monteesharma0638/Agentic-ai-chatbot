@@ -1,0 +1,19 @@
+{
+  "name": "@mf-chat/widget",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Embeddable chat widget for the MF assistant",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch"
+  },
+  "dependencies": {
+    "chart.js": "^4.5.1",
+    "dompurify": "^3.4.16",
+    "marked": "^18.0.14"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

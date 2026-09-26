@@ -1,0 +1,35 @@
+# docker compose up --build
+# Fill agent-service/.env and mcp-server/.env first (copy the .env.example files).
+services:
+  mcp:
+    build: .
+    working_dir: /app/mcp-server
+    command: ['node', 'dist/index.js', '--http']
+    env_file: mcp-server/.env
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: '3100'
+      MCP_ALLOWED_HOSTS: mcp,localhost,127.0.0.1
+    restart: unless-stopped
+
+  agent:
+    build: .
+    working_dir: /app/agent-service
+    command: ['node', 'dist/index.js']
+    env_file: agent-service/.env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: '3000'
+      MF_MCP_URL: http://mcp:3100/mcp
+      REDIS_URL: redis://redis:6379
+      ENABLE_PLAYGROUND: 'false'
+      TRUST_PROXY: '1'
+    ports:
+      - '3000:3000'
+    depends_on: [mcp, redis]
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped

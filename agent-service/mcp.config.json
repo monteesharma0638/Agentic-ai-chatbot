@@ -1,0 +1,10 @@
+{
+  "servers": [
+    {
+      "name": "india-mf",
+      "transport": "http",
+      "url": "${MF_MCP_URL:-http://127.0.0.1:3100/mcp}",
+      "headers": { "Authorization": "Bearer ${MCP_AUTH_TOKEN}" }
+    }
+  ]
+}

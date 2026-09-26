@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MF Agent Playground</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f3f5f4;
+        --card: #ffffff;
+        --border: #e3e8e6;
+        --text: #16211d;
+        --muted: #5f6b67;
+        --accent: #0b7a5a;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0c110f;
+          --card: #121816;
+          --border: #2a3531;
+          --text: #e7eeeb;
+          --muted: #9aa8a3;
+          --accent: #34c197;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      main {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        gap: 16px;
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 16px;
+        height: 100vh;
+      }
+      aside {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px;
+        overflow: auto;
+      }
+      h1 { font-size: 16px; margin: 0 0 4px; }
+      .note { color: var(--muted); margin: 0 0 12px; font-size: 12px; }
+      label { display: block; font-weight: 600; font-size: 12px; margin: 12px 0 4px; }
+      input[type='text'], input[type='number'] {
+        width: 100%;
+        padding: 7px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--text);
+        font: inherit;
+      }
+      .check { display: flex; gap: 8px; align-items: center; font-weight: 400; }
+      button {
+        margin-top: 16px;
+        width: 100%;
+        padding: 8px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      /* Settings panel is hidden by default (open with ?settings=1): chat takes the full width. */
+      main:has(> aside[hidden]) { grid-template-columns: minmax(0, 1fr); max-width: 860px; }
+      #chat { height: calc(100vh - 32px); }
+      @media (max-width: 760px) {
+        main { grid-template-columns: 1fr; height: auto; }
+        #chat { height: 80vh; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <!-- Hidden for now; add ?settings=1 to the URL to show it again. -->
+      <aside id="settings" hidden>
+        <h1>MF Agent Playground</h1>
+        <p class="note">
+          This page loads the same <code>/embed.js</code> your website will. The token is minted by the dev-only
+          <code>/dev/token</code> endpoint, the same way the Blade snippet does it.
+        </p>
+        <form method="get">
+          <label for="uid">User ID</label>
+          <input id="uid" name="uid" type="text" value="demo-user" />
+          <label for="name">User name</label>
+          <input id="name" name="name" type="text" value="Asha" />
+          <label for="scheme">Viewing scheme code (fund page)</label>
+          <input id="scheme" name="scheme" type="number" placeholder="e.g. 122639" />
+          <label class="check"><input id="guest" name="guest" type="checkbox" value="1" /> Guest (no token)</label>
+          <input type="hidden" name="settings" value="1" />
+          <button type="submit">Apply</button>
+        </form>
+        <p class="note" style="margin-top: 12px">
+          With <code>PORTFOLIO_SOURCE=demo</code>, signed-in users can ask “How is my portfolio doing?”.
+        </p>
+      </aside>
+      <div id="chat"></div>
+    </main>
+
+    <script src="/embed.js" data-manual></script>
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      document.getElementById('settings').hidden = params.get('settings') !== '1';
+      for (const key of ['uid', 'name', 'scheme']) {
+        if (params.has(key)) document.getElementById(key).value = params.get(key);
+      }
+      const guest = params.get('guest') === '1';
+      document.getElementById('guest').checked = guest;
+
+      let token = '';
+      if (!guest) {
+        const q = new URLSearchParams({ uid: document.getElementById('uid').value, name: document.getElementById('name').value });
+        token = (await (await fetch(`/dev/token?${q}`)).json()).token ?? '';
+      }
+      const scheme = Number(document.getElementById('scheme').value);
+
+      window.MfChat.init({
+        mode: 'inline',
+        target: '#chat',
+        token,
+        ...(scheme && { context: { page: 'fund-detail', scheme_code: scheme } }),
+      });
+    </script>
+  </body>
+</html>

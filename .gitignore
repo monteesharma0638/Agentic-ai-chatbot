@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+*.log
+coverage/
+
+# Built by `npm run build -w widget`
+agent-service/public/embed.js
+agent-service/public/embed.js.gz
