@@ -5,8 +5,9 @@ import { pino } from 'pino';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MfAgent, type ModelClient } from '../src/agent/agent.js';
 import { compactHistory } from '../src/agent/history.js';
+import { chartsFromToolResult } from '../src/agent/presentation.js';
 import { sanitizeSchema } from '../src/agent/schema.js';
-import type { AgentEvent, ChatUser } from '../src/agent/types.js';
+import type { AgentEvent, Chart, ChatUser } from '../src/agent/types.js';
 import { signUserToken, verifyUserToken } from '../src/auth/userToken.js';
 import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/http/app.js';
@@ -108,6 +109,68 @@ describe('schema sanitizer', () => {
       },
       required: ['code'],
     });
+  });
+});
+
+describe('charts from tool results', () => {
+  const holding = (name: string, value: number) => ({ scheme_name: `${name} - Direct Plan - Growth`, current_value: value });
+
+  it('draws a pie of where the money is (4 funds + "others") and money put in vs. worth now', () => {
+    const charts = chartsFromToolResult('get_my_portfolio', {
+      total_value: 600,
+      total_invested: 500,
+      total_gain: 100,
+      holdings: [holding('A Fund', 200), holding('B Fund', 150), holding('C Fund', 100), holding('D Fund', 80), holding('E Fund', 40), holding('F Fund', 30)],
+    });
+    expect(charts.map((c) => c.kind)).toEqual(['donut', 'bar']);
+    const donut = charts[0] as Extract<Chart, { kind: 'donut' }>;
+    expect(donut.slices.map((s) => s.label)).toEqual(['A Fund', 'B Fund', 'C Fund', 'D Fund', '2 other funds']);
+    expect(donut.slices.at(-1)).toMatchObject({ value: 70, other: true });
+    expect((charts[1] as Extract<Chart, { kind: 'bar' }>).bars.map((b) => b.value)).toEqual([500, 600]);
+  });
+
+  it('skips a pie for fewer than 3 funds', () => {
+    const charts = chartsFromToolResult('analyze_portfolio', { total_value: 300, holdings: [holding('A', 200), holding('B', 100)] });
+    expect(charts).toEqual([]);
+  });
+
+  it('draws ranking, comparison and future-estimate bars', () => {
+    const rank = chartsFromToolResult('rank_funds_in_category', {
+      categories_matched: ['Equity Scheme - Small Cap Fund'],
+      period: '3Y',
+      return_type: 'CAGR',
+      top: [
+        { scheme_name: 'X Small Cap Fund - Direct Plan - Growth', return_pct: 30.1 },
+        { scheme_name: 'Y Small Cap Fund-Direct Plan-Growth', return_pct: 25.4 },
+      ],
+    })[0];
+    expect(rank).toMatchObject({ kind: 'bar', unit: 'pct', title: 'Small Cap funds with the highest returns' });
+    expect((rank as Extract<Chart, { kind: 'bar' }>).bars.map((b) => b.label)).toEqual(['X Small Cap Fund', 'Y Small Cap Fund']);
+
+    const compare = chartsFromToolResult('compare_funds', {
+      growth_period: { from: '2023-09-28', to: '2026-09-25' },
+      funds: [
+        { scheme_name: 'SBI SMALL CAP FUND - DIRECT PLAN - GROWTH', growth_of_10000: 15000 },
+        { scheme_name: 'Nippon India Small Cap Fund - Direct Plan Growth Plan - Growth Option', growth_of_10000: 13000 },
+      ],
+    })[0] as Extract<Chart, { kind: 'bar' }>;
+    expect(compare.bars.map((b) => b.label)).toEqual(['Money put in', 'SBI Small Cap Fund', 'Nippon India Small Cap Fund']);
+    expect(compare.bars[0]).toEqual({ label: 'Money put in', value: 10000, muted: true });
+
+    const future = chartsFromToolResult('estimate_future_value', {
+      horizon_years: 10,
+      scenarios: [
+        { scenario: 'conservative (10th percentile)', annual_return_pct: 8, total_invested: 1200000, future_value: 1800000 },
+        { scenario: 'base (median)', annual_return_pct: 12, total_invested: 1200000, future_value: 2300000 },
+        { scenario: 'optimistic (90th percentile)', annual_return_pct: 16, total_invested: 1200000, future_value: 2900000 },
+      ],
+    })[0] as Extract<Chart, { kind: 'bar' }>;
+    expect(future.bars.map((b) => b.label)).toEqual([
+      'Money put in',
+      'If returns are low (8% a year)',
+      'If returns are average (12% a year)',
+      'If returns are high (16% a year)',
+    ]);
   });
 });
 
@@ -555,6 +618,13 @@ describe('HTTP API', () => {
     expect(body.reply).toBe('Hi guest');
     expect(body.conversation_id).toMatch(/^[0-9a-f-]{36}$/);
     expect((await post('/api/chat', { message: 'hello' }, { 'X-Visitor-Id': 'short' })).status).toBe(401);
+  });
+
+  it('gives the widget its public settings without requiring sign-in', async () => {
+    const res = await fetch(`${base}/api/widget/config`, { headers: { Origin: ORIGIN } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBe(ORIGIN);
+    expect(await res.json()).toEqual({ assistant_name: 'Fundy', portfolio: false });
   });
 
   it('serves the embeddable widget script', async () => {

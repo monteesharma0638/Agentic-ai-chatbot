@@ -48,13 +48,33 @@ export interface ChartSeries {
   points: [string, number][];
 }
 
-export interface Chart {
-  kind: 'line';
+interface ChartBase {
   title: string;
   subtitle?: string;
+}
+
+/** Change over time (NAV history, SIP growth). The last series is the headline; earlier ones are grey context. */
+export interface LineChart extends ChartBase {
+  kind: 'line';
   y_label?: string;
   series: ChartSeries[];
 }
+
+/** Compare amounts or returns. `muted` bars are grey reference points such as "Money put in". */
+export interface BarChart extends ChartBase {
+  kind: 'bar';
+  unit: 'inr' | 'pct';
+  bars: { label: string; value: number; muted?: boolean }[];
+}
+
+/** Part-to-whole at a glance (e.g. where a portfolio's money is): 3–5 slices, the last may be "Others". */
+export interface DonutChart extends ChartBase {
+  kind: 'donut';
+  center_label?: string;
+  slices: { label: string; value: number; other?: boolean }[];
+}
+
+export type Chart = LineChart | BarChart | DonutChart;
 
 export interface Usage {
   prompt_tokens: number;

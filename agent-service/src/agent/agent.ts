@@ -15,7 +15,7 @@ import type { PortfolioProvider } from '../portfolio/providers.js';
 import { conversationKey, type ConversationStore } from '../store/conversations.js';
 import { compactHistory, mergeTextParts } from './history.js';
 import { LOCAL_TOOLS, type LocalToolContext } from './localTools.js';
-import { chartFromToolResult, toolLabel } from './presentation.js';
+import { chartsFromToolResult, toolLabel } from './presentation.js';
 import { buildSystemInstruction } from './prompt.js';
 import { toFunctionDeclaration } from './schema.js';
 import type { AgentEvent, Chart, ChatInput, ConversationRecord, Usage } from './types.js';
@@ -203,7 +203,7 @@ export class MfAgent {
     const key = conversationKey(req.user.id, conversationId);
 
     if (this.active.has(key)) {
-      yield { type: 'error', code: 'busy', message: 'A reply is already being generated in this conversation.' };
+      yield { type: 'error', code: 'busy', message: "I'm still answering your previous question. Please wait for it to finish." };
       return;
     }
     this.active.add(key);
@@ -289,7 +289,7 @@ export class MfAgent {
         usage.total_tokens += turn.usage?.totalTokenCount ?? 0;
 
         if (blockReason) {
-          throw new AgentError('blocked', "I can't help with that request. Please ask something about mutual funds or investing.");
+          throw new AgentError('blocked', 'I can only help with mutual funds and investing. Please ask me something about those.');
         }
 
         if (calls.length === 0 && !stepText.trim()) {
@@ -343,8 +343,7 @@ export class MfAgent {
           yield { type: 'tool_end', id: ids[i], name, ok: result.ok, ms };
 
           if (result.ok) {
-            const chart = chartFromToolResult(name, result.data);
-            if (chart) {
+            for (const chart of chartsFromToolResult(name, result.data)) {
               charts.push(chart);
               yield { type: 'chart', chart };
             }
@@ -396,8 +395,8 @@ export class MfAgent {
         code: status === 429 ? 'rate_limited' : 'model_error',
         message:
           status === 429
-            ? 'The assistant is receiving too many requests right now. Please try again in a minute.'
-            : 'Something went wrong while generating a reply. Please try again.',
+            ? 'A lot of people are asking questions right now. Please try again in a minute.'
+            : "The answer didn't come through this time. Please try again.",
       };
     } finally {
       this.active.delete(key);

@@ -8,6 +8,8 @@
  *   data-mode         "floating" (default) or "inline"
  *   data-target       CSS selector of the container for inline mode
  *   data-title / data-subtitle
+ *   data-launcher-text Words on the floating button (default "Ask about funds")
+ *   data-teaser       "false" to skip the one-time hello bubble above the button
  *   data-accent       Brand colour, e.g. "#4f46e5"
  *   data-theme        "light" | "dark" (default: follows the OS)
  *   data-scheme-code  AMFI scheme code of the fund page being viewed ("this fund")
@@ -45,13 +47,19 @@ function visitorId() {
   }
 }
 
-/** Reads the user id from the token payload (only to namespace local storage; the server verifies it). */
-function tokenUserId(token) {
+/**
+ * Reads the user id and first name from the token payload, only to namespace local storage and
+ * greet the user by name; the server verifies the token itself.
+ */
+function tokenClaims(token) {
   try {
     const payload = token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(payload)).uid ?? 'user';
+    const bytes = Uint8Array.from(atob(payload), (c) => c.charCodeAt(0));
+    const { uid, name } = JSON.parse(new TextDecoder().decode(bytes));
+    const first = typeof name === 'string' ? name.trim().split(/\s+/)[0] : '';
+    return { uid: uid ?? 'user', name: first ? first[0].toUpperCase() + first.slice(1) : '' };
   } catch {
-    return 'user';
+    return { uid: 'user', name: '' };
   }
 }
 
@@ -97,12 +105,19 @@ function init(options = {}) {
   const theme = opt('theme');
   if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
 
-  const userKey = token ? tokenUserId(token) : 'guest';
+  const claims = token ? tokenClaims(token) : { uid: 'guest', name: '' };
+  const teaser = opt('teaser');
   instance = mountMfChat(root, {
     mode,
     ...(opt('title') && { title: opt('title') }),
     ...(opt('subtitle') && { subtitle: opt('subtitle') }),
-    storageKey: `mf-chat:conversation:${userKey}`,
+    ...(opt('launcherText') && { launcherText: opt('launcherText') }),
+    teaser: teaser !== false && teaser !== 'false',
+    userName: claims.name,
+    signedIn: Boolean(token),
+    getContext: () => context,
+    storageKey: `mf-chat:conversation:${claims.uid}`,
+    configUrl: `${apiBase}/api/widget/config`,
     streamUrl: `${apiBase}/api/chat/stream`,
     historyUrl: `${apiBase}/api/conversations/{id}`,
     resetUrl: `${apiBase}/api/conversations/{id}`,
@@ -116,6 +131,7 @@ function init(options = {}) {
   Object.assign(window.MfChat, {
     setContext(next) {
       context = next ?? null;
+      instance.refreshWelcome();
     },
   });
   return window.MfChat;

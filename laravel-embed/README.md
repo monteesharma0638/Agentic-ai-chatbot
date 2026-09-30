@@ -74,6 +74,12 @@ Or from JavaScript, e.g. in a single-page flow:
 
 **Branding:** add `data-accent="#4f46e5"` and/or `data-theme="light"` to the script tag.
 
+**Button wording and first-visit hello:** the floating button reads "Ask about funds", and new
+visitors see a short hello bubble above it once. Change the wording with
+`data-launcher-text="Need help?"`, or turn the hello off with `data-teaser="false"`.
+The greeting uses the logged-in user's first name from the token, and the assistant's name
+comes from `ASSISTANT_NAME` in `agent-service/.env`.
+
 **Guests:** logged-out visitors get no token. They can chat only if `ALLOW_ANONYMOUS=true`
 in `agent-service/.env`; otherwise the widget asks them to sign in.
 

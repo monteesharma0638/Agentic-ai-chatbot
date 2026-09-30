@@ -87,7 +87,7 @@ export function createApp(deps: {
       if (!result.ok) {
         return void res.status(401).json({
           error: result.reason === 'expired' ? 'token_expired' : 'invalid_token',
-          message: 'Your session has expired. Please refresh the page to keep chatting.',
+          message: 'Your session has timed out. Refresh the page to keep chatting.',
         });
       }
       const { uid, name, risk } = result.claims;
@@ -99,7 +99,7 @@ export function createApp(deps: {
       req.chatUser = { id: `guest:${visitor}`, guest: true };
       return next();
     }
-    res.status(401).json({ error: 'auth_required', message: 'Please sign in to use the assistant.' });
+    res.status(401).json({ error: 'auth_required', message: 'Please log in to chat with the assistant.' });
   };
 
   const allowUser = createRateLimiter(config.RATE_LIMIT_PER_MINUTE);
@@ -116,11 +116,11 @@ export function createApp(deps: {
       return null;
     }
     if (parsed.data.message.length > config.MAX_MESSAGE_CHARS) {
-      res.status(422).json({ error: 'message_too_long', message: `Please keep messages under ${config.MAX_MESSAGE_CHARS} characters.` });
+      res.status(422).json({ error: 'message_too_long', message: `That message is a bit long. Please keep it under ${config.MAX_MESSAGE_CHARS} characters.` });
       return null;
     }
     if (!allowUser(req.chatUser!.id) || !allowIp(`ip:${req.ip}`)) {
-      res.status(429).json({ error: 'rate_limited', message: "You're sending messages too quickly. Please wait a moment." });
+      res.status(429).json({ error: 'rate_limited', message: "You're asking questions a little too fast. Wait a few seconds, then try again." });
       return null;
     }
     return {
@@ -228,6 +228,12 @@ export function createApp(deps: {
   });
 
   // ---------- widget script ----------
+  /** Public, non-personal settings the widget needs before the first message (greeting, suggested questions). */
+  app.get('/api/widget/config', (_req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.json({ assistant_name: config.ASSISTANT_NAME, portfolio: config.PORTFOLIO_SOURCE !== 'none' });
+  });
+
   const embedPath = resolve(PUBLIC_DIR, 'embed.js');
   app.get('/embed.js', (req, res) => {
     if (!existsSync(embedPath)) {

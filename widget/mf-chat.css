@@ -1,23 +1,37 @@
-/* MF Chat widget (rendered inside a Shadow DOM by embed.js). Theme via the custom properties below or data-accent / data-theme. */
+/* MF Chat widget (rendered inside a Shadow DOM by embed.js). Theme via the custom properties below or data-accent / data-theme.
+ *
+ * Designed for everyday Indian investors on phones: large readable text, big tap targets, a chat that looks
+ * like the messaging apps people already use, and one warm accent (the marigold assistant avatar).
+ */
 .mfc-root {
   --mfc-accent: #0b7a5a;
   --mfc-accent-ink: #ffffff;
-  --mfc-chart-2: #8a94a6;
+  --mfc-marigold: #f2a31b;
+  --mfc-sprout: #0a4d3a;
+  --mfc-online: #1f9d63;
+  --mfc-chart-2: #9aa5a0;
+  /* Pie slices, in this order (checked for colour-blind separation between neighbours, incl. last↔first). */
+  --mfc-cat-1: #2a78d6;
+  --mfc-cat-2: #eb6834;
+  --mfc-cat-3: #1baf7a;
+  --mfc-cat-4: #eda100;
+  --mfc-cat-other: #6b7571;
   --mfc-bg: #ffffff;
-  --mfc-surface: #f5f7f6;
-  --mfc-border: #e3e8e6;
-  --mfc-text: #16211d;
-  --mfc-muted: #5f6b67;
+  --mfc-surface: #eaf4ef;
+  --mfc-field: #f3f6f4;
+  --mfc-border: #dde7e2;
+  --mfc-text: #1d2b26;
+  --mfc-muted: #5e6c67;
   --mfc-user-bg: #0b7a5a;
   --mfc-user-ink: #ffffff;
   --mfc-danger: #b42318;
-  --mfc-radius: 14px;
-  --mfc-font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
-  --mfc-shadow: 0 18px 50px rgba(16, 24, 20, 0.18), 0 2px 8px rgba(16, 24, 20, 0.08);
+  --mfc-radius: 18px;
+  --mfc-font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans Devanagari', sans-serif;
+  --mfc-shadow: 0 18px 50px rgba(16, 36, 28, 0.18), 0 2px 8px rgba(16, 36, 28, 0.08);
   font-family: var(--mfc-font);
   color: var(--mfc-text);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.55;
   /* Inherited properties cross the Shadow DOM boundary; reset what host pages commonly set. */
   font-style: normal;
   font-weight: 400;
@@ -32,39 +46,88 @@
   visibility: visible;
   cursor: auto;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
 @media (prefers-color-scheme: dark) {
   .mfc-root:not([data-theme='light']) {
-    --mfc-accent: #34c197;
-    --mfc-accent-ink: #06231a;
-    --mfc-chart-2: #9aa4b5;
-    --mfc-bg: #121816;
-    --mfc-surface: #1b2320;
-    --mfc-border: #2a3531;
-    --mfc-text: #e7eeeb;
-    --mfc-muted: #9aa8a3;
+    --mfc-accent: #3cc39a;
+    --mfc-accent-ink: #04241a;
+    --mfc-online: #3cc39a;
+    --mfc-chart-2: #7d8a85;
+    --mfc-cat-1: #3987e5;
+    --mfc-cat-2: #d95926;
+    --mfc-cat-3: #199e70;
+    --mfc-cat-4: #c98500;
+    --mfc-cat-other: #6f7a75;
+    --mfc-bg: #131a17;
+    --mfc-surface: #1c2a24;
+    --mfc-field: #1a221f;
+    --mfc-border: #2b3833;
+    --mfc-text: #e6eeea;
+    --mfc-muted: #9fb0a9;
     --mfc-user-bg: #1f6b53;
     --mfc-user-ink: #f2fbf7;
     --mfc-danger: #ff8a80;
   }
 }
 .mfc-root[data-theme='dark'] {
-  --mfc-accent: #34c197;
-  --mfc-accent-ink: #06231a;
-  --mfc-bg: #121816;
-  --mfc-surface: #1b2320;
-  --mfc-border: #2a3531;
-  --mfc-text: #e7eeeb;
-  --mfc-muted: #9aa8a3;
+  --mfc-accent: #3cc39a;
+  --mfc-accent-ink: #04241a;
+  --mfc-online: #3cc39a;
+  --mfc-chart-2: #7d8a85;
+  --mfc-cat-1: #3987e5;
+  --mfc-cat-2: #d95926;
+  --mfc-cat-3: #199e70;
+  --mfc-cat-4: #c98500;
+  --mfc-cat-other: #6f7a75;
+  --mfc-bg: #131a17;
+  --mfc-surface: #1c2a24;
+  --mfc-field: #1a221f;
+  --mfc-border: #2b3833;
+  --mfc-text: #e6eeea;
+  --mfc-muted: #9fb0a9;
   --mfc-user-bg: #1f6b53;
   --mfc-user-ink: #f2fbf7;
+  --mfc-danger: #ff8a80;
 }
 
 .mfc-root *,
 .mfc-root *::before,
 .mfc-root *::after {
   box-sizing: border-box;
+}
+/* :where() keeps these at zero specificity so each button's own class sets its size. */
+:where(.mfc-root) button {
+  font: inherit;
+  cursor: pointer;
+}
+:where(.mfc-root) button:disabled {
+  cursor: default;
+}
+
+/* ---------- assistant avatar: the one warm accent ---------- */
+.mfc-avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--mfc-marigold);
+  color: var(--mfc-sprout);
+  display: grid;
+  place-items: center;
+}
+.mfc-avatar svg {
+  width: 20px;
+  height: 20px;
+}
+.mfc-avatar-lg {
+  width: 40px;
+  height: 40px;
+}
+.mfc-avatar-lg svg {
+  width: 26px;
+  height: 26px;
 }
 
 /* ---------- layout ---------- */
@@ -88,49 +151,78 @@
   right: 20px;
   bottom: 88px;
   width: min(420px, calc(100vw - 32px));
-  height: min(640px, calc(100vh - 120px));
+  height: min(660px, calc(100vh - 120px));
   box-shadow: var(--mfc-shadow);
   z-index: 2147483000;
   opacity: 0;
   transform: translateY(12px) scale(0.98);
+  transform-origin: bottom right;
   pointer-events: none;
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  visibility: hidden;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    visibility 0s linear 0.18s;
 }
 .mfc-floating.mfc-open .mfc-panel {
   opacity: 1;
   transform: none;
   pointer-events: auto;
+  visibility: visible;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
 }
 .mfc-inline .mfc-close {
   display: none;
 }
 
+/* Launcher: says what it does in words, not just an icon. Becomes a close button while the chat is open. */
 .mfc-launcher {
   position: fixed;
   right: 20px;
   bottom: 20px;
-  width: 56px;
   height: 56px;
-  border-radius: 50%;
+  padding: 0 22px 0 10px;
   border: 0;
+  border-radius: 999px;
   background: var(--mfc-accent);
   color: var(--mfc-accent-ink);
   box-shadow: var(--mfc-shadow);
-  cursor: pointer;
   z-index: 2147483000;
-  display: grid;
-  place-items: center;
-  transition: transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
 }
-.mfc-launcher:hover {
-  transform: translateY(-2px);
+.mfc-launcher .mfc-avatar {
+  width: 38px;
+  height: 38px;
 }
-.mfc-launcher svg {
-  width: 26px;
-  height: 26px;
+.mfc-launcher .mfc-avatar svg {
+  width: 24px;
+  height: 24px;
+}
+.mfc-launcher-close {
+  display: none;
+}
+.mfc-launcher-close svg {
+  width: 24px;
+  height: 24px;
 }
 .mfc-open .mfc-launcher {
-  transform: scale(0.9);
+  width: 56px;
+  padding: 0;
+  justify-content: center;
+}
+.mfc-open .mfc-launcher .mfc-avatar,
+.mfc-open .mfc-launcher-text {
+  display: none;
+}
+.mfc-open .mfc-launcher-close {
+  display: grid;
 }
 
 @media (max-width: 520px) {
@@ -138,7 +230,64 @@
     inset: 0;
     width: 100%;
     height: 100%;
+    border: 0;
     border-radius: 0;
+  }
+  /* Full-screen on phones: the header has its own close button, and the launcher would cover the send button. */
+  .mfc-open .mfc-launcher {
+    display: none;
+  }
+  .mfc-launcher {
+    right: 16px;
+    bottom: 16px;
+  }
+}
+
+/* One-time hello above the launcher */
+.mfc-teaser {
+  position: fixed;
+  right: 20px;
+  bottom: 88px;
+  width: min(300px, calc(100vw - 40px));
+  display: flex;
+  align-items: flex-start;
+  background: var(--mfc-bg);
+  color: var(--mfc-text);
+  border: 1px solid var(--mfc-border);
+  border-radius: 18px 18px 6px 18px;
+  box-shadow: var(--mfc-shadow);
+  padding: 12px 6px 12px 12px;
+  z-index: 2147483000;
+  animation: mfc-teaser-in 0.3s ease-out;
+}
+@keyframes mfc-teaser-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.mfc-teaser-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+.mfc-teaser .mfc-teaser-close {
+  width: 30px;
+  height: 30px;
+  margin-top: -4px;
+}
+@media (max-width: 520px) {
+  .mfc-teaser {
+    right: 16px;
+    bottom: 84px;
   }
 }
 
@@ -146,8 +295,8 @@
 .mfc-header {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 12px 12px 12px 16px;
+  gap: 10px;
+  padding: 12px 10px 12px 14px;
   border-bottom: 1px solid var(--mfc-border);
 }
 .mfc-heading {
@@ -157,55 +306,102 @@
   min-width: 0;
 }
 .mfc-title {
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .mfc-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--mfc-muted);
-  font-size: 12px;
+  font-size: 13px;
+}
+.mfc-online {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mfc-online);
+}
+.mfc-text-btn {
+  flex: none;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 12px 0 8px;
+  border: 1px solid var(--mfc-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mfc-text);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.mfc-has-messages .mfc-text-btn {
+  display: inline-flex;
+}
+.mfc-text-btn:hover {
+  background: var(--mfc-field);
+}
+.mfc-text-btn svg {
+  width: 16px;
+  height: 16px;
 }
 .mfc-icon-btn {
-  width: 32px;
-  height: 32px;
+  flex: none;
+  width: 40px;
+  height: 40px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 50%;
   background: transparent;
   color: var(--mfc-muted);
-  cursor: pointer;
   display: grid;
   place-items: center;
 }
 .mfc-icon-btn:hover {
-  background: var(--mfc-surface);
+  background: var(--mfc-field);
   color: var(--mfc-text);
 }
 .mfc-icon-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
 }
 
 /* ---------- messages ---------- */
 .mfc-log {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  overscroll-behavior: contain;
+  padding: 18px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  scroll-behavior: smooth;
+  gap: 16px;
 }
 .mfc-msg {
   display: flex;
-  flex-direction: column;
-  max-width: 92%;
+  gap: 8px;
 }
 .mfc-user {
   align-self: flex-end;
+  max-width: 85%;
 }
 .mfc-assistant {
-  align-self: flex-start;
-  width: 92%;
+  align-self: stretch;
+  padding-right: 4%;
+}
+.mfc-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 .mfc-bubble {
+  max-width: 100%;
   padding: 10px 14px;
   border-radius: var(--mfc-radius);
   overflow-wrap: anywhere;
@@ -213,20 +409,19 @@
 .mfc-user .mfc-bubble {
   background: var(--mfc-user-bg);
   color: var(--mfc-user-ink);
-  border-bottom-right-radius: 4px;
+  border-top-right-radius: 6px;
   white-space: pre-wrap;
 }
 .mfc-assistant .mfc-bubble {
   background: var(--mfc-surface);
-  border-bottom-left-radius: 4px;
+  border-top-left-radius: 6px;
 }
 .mfc-assistant .mfc-bubble:empty {
   display: none;
 }
 .mfc-error .mfc-bubble {
-  color: var(--mfc-danger);
   border: 1px solid color-mix(in srgb, var(--mfc-danger) 30%, transparent);
-  background: color-mix(in srgb, var(--mfc-danger) 6%, var(--mfc-bg));
+  background: color-mix(in srgb, var(--mfc-danger) 7%, var(--mfc-bg));
 }
 
 /* markdown */
@@ -239,23 +434,29 @@
 .mfc-bubble p,
 .mfc-bubble ul,
 .mfc-bubble ol {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 .mfc-bubble ul,
 .mfc-bubble ol {
   padding-left: 20px;
 }
+.mfc-bubble li + li {
+  margin-top: 4px;
+}
 .mfc-bubble h1,
 .mfc-bubble h2,
 .mfc-bubble h3 {
-  font-size: 14px;
-  margin: 10px 0 6px;
+  font-size: 15px;
+  margin: 12px 0 6px;
+}
+.mfc-bubble strong {
+  font-weight: 650;
 }
 .mfc-bubble a {
   color: var(--mfc-accent);
 }
 .mfc-bubble code {
-  font-size: 12.5px;
+  font-size: 13px;
   background: var(--mfc-bg);
   padding: 1px 4px;
   border-radius: 4px;
@@ -264,14 +465,14 @@
   display: block;
   overflow-x: auto;
   border-collapse: collapse;
-  margin: 8px 0;
-  font-size: 12.5px;
+  margin: 8px 0 10px;
+  font-size: 13.5px;
   font-variant-numeric: tabular-nums;
 }
 .mfc-bubble th,
 .mfc-bubble td {
   border: 1px solid var(--mfc-border);
-  padding: 5px 8px;
+  padding: 6px 9px;
   text-align: left;
   white-space: nowrap;
 }
@@ -279,39 +480,114 @@
   background: var(--mfc-bg);
   font-weight: 600;
 }
-
-/* tool activity: one status chip, replaced as each step starts */
-.mfc-activity {
-  margin: 0 0 6px;
-}
-.mfc-tool {
-  display: inline-block;
-  font-size: 12px;
+/* The closing risk line: present, but quieter than the answer. */
+.mfc-bubble .mfc-note {
+  margin-top: 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
   color: var(--mfc-muted);
-  border: 1px solid var(--mfc-border);
-  border-radius: 999px;
-  padding: 2px 10px 2px 22px;
-  position: relative;
-  animation: mfc-chip-in 0.18s ease-out;
 }
-@keyframes mfc-chip-in {
+.mfc-note em {
+  font-style: normal;
+}
+
+/* ---------- welcome ---------- */
+.mfc-welcome {
+  animation: mfc-rise 0.35s ease-out both;
+}
+.mfc-greeting {
+  font-size: 17px;
+  font-weight: 650;
+}
+.mfc-bubble .mfc-hint {
+  color: var(--mfc-muted);
+  font-size: 14px;
+}
+.mfc-suggestions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  width: 100%;
+  animation: mfc-rise 0.35s ease-out 0.15s both;
+}
+.mfc-chip {
+  max-width: 100%;
+  text-align: left;
+  font-size: 14.5px;
+  line-height: 1.4;
+  color: var(--mfc-accent);
+  background: var(--mfc-bg);
+  border: 1.5px solid color-mix(in srgb, var(--mfc-accent) 40%, transparent);
+  border-radius: 16px;
+  padding: 9px 14px;
+}
+.mfc-chip:hover {
+  background: color-mix(in srgb, var(--mfc-accent) 8%, var(--mfc-bg));
+  border-color: var(--mfc-accent);
+}
+@keyframes mfc-rise {
   from {
     opacity: 0;
-    transform: translateY(3px);
+    transform: translateY(6px);
   }
 }
-.mfc-tool::before {
+
+/* ---------- while the assistant works ---------- */
+.mfc-typing {
+  display: inline-flex;
+  gap: 5px;
+  padding: 7px 2px;
+}
+.mfc-typing i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mfc-muted);
+  opacity: 0.35;
+  animation: mfc-bounce 1.2s ease-in-out infinite;
+}
+.mfc-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.mfc-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes mfc-bounce {
+  0%,
+  60%,
+  100% {
+    transform: none;
+    opacity: 0.35;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 0.9;
+  }
+}
+.mfc-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 0 4px;
+  font-size: 13.5px;
+  color: var(--mfc-muted);
+}
+.mfc-step {
+  position: relative;
+  padding-left: 16px;
+}
+.mfc-step::before {
   content: '';
   position: absolute;
-  left: 8px;
+  left: 2px;
   top: 50%;
   width: 8px;
   height: 8px;
   margin-top: -4px;
   border-radius: 50%;
   background: var(--mfc-accent);
-}
-.mfc-running::before {
   animation: mfc-pulse 1s ease-in-out infinite;
 }
 @keyframes mfc-pulse {
@@ -319,72 +595,208 @@
     opacity: 0.25;
   }
 }
+.mfc-slow {
+  padding-left: 16px;
+  font-size: 13px;
+}
 
-.mfc-pending .mfc-bubble:empty {
-  display: block;
-  width: 48px;
+/* ---------- after an answer ---------- */
+.mfc-actions {
+  display: flex;
+  gap: 2px;
+  margin: 4px 0 0 -4px;
+}
+.mfc-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   height: 36px;
-  background:
-    radial-gradient(circle, var(--mfc-muted) 3px, transparent 4px) 10px 50% / 10px 10px no-repeat,
-    radial-gradient(circle, var(--mfc-muted) 3px, transparent 4px) 20px 50% / 10px 10px no-repeat,
-    radial-gradient(circle, var(--mfc-muted) 3px, transparent 4px) 30px 50% / 10px 10px no-repeat,
-    var(--mfc-surface);
-  animation: mfc-pulse 1.2s ease-in-out infinite;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mfc-muted);
+  font-size: 13px;
+}
+.mfc-action:hover {
+  background: var(--mfc-field);
+  color: var(--mfc-text);
+}
+.mfc-action svg {
+  width: 16px;
+  height: 16px;
+}
+.mfc-retry {
+  margin-top: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border: 1.5px solid var(--mfc-accent);
+  border-radius: 999px;
+  background: var(--mfc-bg);
+  color: var(--mfc-accent);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.mfc-retry:hover {
+  background: color-mix(in srgb, var(--mfc-accent) 8%, var(--mfc-bg));
 }
 
 /* charts */
 .mfc-chart {
+  align-self: stretch;
   margin: 8px 0 0;
-  padding: 10px 12px 8px;
+  padding: 12px 12px 8px;
   border: 1px solid var(--mfc-border);
-  border-radius: var(--mfc-radius);
+  border-radius: 14px;
   background: var(--mfc-bg);
 }
 .mfc-chart figcaption {
   display: flex;
   flex-direction: column;
-  margin-bottom: 6px;
+  gap: 2px;
+  margin-bottom: 8px;
 }
 .mfc-chart-title {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.35;
 }
 .mfc-chart-sub {
   color: var(--mfc-muted);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.4;
 }
 .mfc-chart-box {
   position: relative;
-  height: 180px;
+  height: 200px;
 }
 
-/* empty state */
-.mfc-empty {
-  margin: auto 0;
-  text-align: center;
+/* bars: one hue for the answer, grey for reference points such as "Money put in" */
+.mfc-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 0 6px;
 }
-.mfc-empty-title {
+.mfc-bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mfc-bar-label {
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+.mfc-bar-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mfc-bar {
+  flex: none;
+  height: 12px;
+  /* Leave room for the value at the bar's tip. */
+  width: calc(var(--f) * (100% - 7.5em));
+  min-width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: var(--mfc-accent);
+}
+.mfc-bar-value {
+  font-size: 13.5px;
   font-weight: 600;
-  margin: 0 0 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.mfc-suggestions {
+.mfc-bar-muted .mfc-bar {
+  background: var(--mfc-chart-2);
+}
+.mfc-bar-muted .mfc-bar-label,
+.mfc-bar-muted .mfc-bar-value {
+  color: var(--mfc-muted);
+}
+
+/* pie (donut) with its legend; wraps under the dial on narrow screens */
+.mfc-donut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+  padding-bottom: 4px;
+}
+.mfc-donut-dial {
+  position: relative;
+  flex: none;
+  width: 148px;
+  height: 148px;
+}
+.mfc-donut-dial svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.mfc-slice {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 14;
+}
+.mfc-donut-centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.25;
+}
+.mfc-donut-centre strong {
+  font-size: 15px;
+  font-weight: 650;
+}
+.mfc-donut-centre span {
+  font-size: 12px;
+  color: var(--mfc-muted);
+}
+.mfc-legend {
+  flex: 1 1 180px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.mfc-chip {
-  text-align: left;
-  font: inherit;
-  font-size: 13px;
-  color: var(--mfc-text);
-  background: var(--mfc-surface);
-  border: 1px solid var(--mfc-border);
-  border-radius: 10px;
-  padding: 8px 12px;
-  cursor: pointer;
+.mfc-legend li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
 }
-.mfc-chip:hover {
-  border-color: var(--mfc-accent);
+.mfc-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--c);
+}
+.mfc-legend-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mfc-legend-label {
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+.mfc-legend-amount {
+  font-size: 12.5px;
+  color: var(--mfc-muted);
+}
+.mfc-legend-share {
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- composer ---------- */
@@ -392,44 +804,56 @@
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 10px 12px 6px;
+  padding: 10px 12px 8px;
   border-top: 1px solid var(--mfc-border);
 }
 .mfc-input {
   flex: 1;
+  min-height: 46px;
+  max-height: 140px;
   resize: none;
   font: inherit;
+  /* 16px stops iPhones zooming the page when the box is tapped. */
+  font-size: 16px;
+  line-height: 1.4;
   color: var(--mfc-text);
-  background: var(--mfc-surface);
+  background: var(--mfc-field);
   border: 1px solid var(--mfc-border);
-  border-radius: 12px;
-  padding: 9px 12px;
-  max-height: 140px;
+  border-radius: 23px;
+  padding: 11px 16px;
   outline: none;
+}
+.mfc-input::placeholder {
+  color: var(--mfc-muted);
 }
 .mfc-input:focus {
   border-color: var(--mfc-accent);
 }
 .mfc-send {
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: 46px;
+  height: 46px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 50%;
   background: var(--mfc-accent);
   color: var(--mfc-accent-ink);
-  cursor: pointer;
   display: grid;
   place-items: center;
 }
+.mfc-send:disabled {
+  background: var(--mfc-field);
+  color: var(--mfc-muted);
+  border: 1px solid var(--mfc-border);
+}
 .mfc-send svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
 }
 .mfc-disclaimer {
   margin: 0;
-  padding: 0 12px 10px;
-  font-size: 11px;
+  padding: 0 16px max(10px, env(safe-area-inset-bottom));
+  font-size: 11.5px;
+  line-height: 1.45;
   color: var(--mfc-muted);
   text-align: center;
 }
