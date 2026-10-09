@@ -11,7 +11,8 @@ official AMFI NAV data, and streams back an answer with charts.
 - "How is my portfolio doing?" (signed-in users; reads holdings from your database)
 
 Everything runs on **Node.js / TypeScript**. Your Laravel app only adds a `<script>` tag:
-see [`laravel-embed/README.md`](laravel-embed/README.md).
+see [`laravel-embed/README.md`](laravel-embed/README.md). Any other website (WordPress, Shopify,
+plain HTML) pastes the same tag into its header or footer: see [`docs/embed-any-website.md`](docs/embed-any-website.md).
 
 ## Architecture
 

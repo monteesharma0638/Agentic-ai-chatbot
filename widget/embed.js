@@ -1,7 +1,11 @@
 /**
- * Drop-in embed for any website (Laravel Blade, plain HTML, …):
+ * Drop-in embed for any website (Laravel Blade, WordPress, plain HTML, …). One tag in the shared
+ * header or footer puts the chat on every page (see docs/embed-any-website.md):
  *
  *   <script src="https://chat.example.com/embed.js" data-token="…" defer></script>
+ *
+ * The conversation, and whether the chat is open, carry over as visitors move between pages,
+ * including on sites that swap <body> instead of reloading (Turbo, Livewire wire:navigate, pjax).
  *
  * Attributes (all optional):
  *   data-token        Signed user token (see laravel-embed/README.md). Omit for guest mode.
@@ -63,6 +67,27 @@ function tokenClaims(token) {
   }
 }
 
+/**
+ * Puts the floating widget back when the site replaces <body> or its children during navigation
+ * (Turbo, Livewire wire:navigate, pjax, …). Moving the host keeps the Shadow DOM, so an open chat
+ * and a streaming answer continue on the new page.
+ */
+function keepAttached(host) {
+  let body = null;
+  const observer = new MutationObserver(reattach);
+  function reattach() {
+    if (!document.body) return;
+    if (!host.isConnected) document.body.append(host);
+    if (body !== document.body) {
+      body = document.body;
+      observer.disconnect();
+      observer.observe(document.documentElement, { childList: true });
+      observer.observe(body, { childList: true });
+    }
+  }
+  reattach();
+}
+
 let instance = null;
 /** Context set via MfChat.setContext() before the widget finished loading. */
 let pendingContext;
@@ -88,7 +113,11 @@ function init(options = {}) {
   } else {
     host = document.createElement('div');
     host.id = 'mf-chat-host';
+    // Page rules can still reach the host element itself (`body > div { transform: … }` would trap the
+    // fixed panel, `div:empty { display: none }` would hide it); inline !important beats them.
+    host.style.setProperty('all', 'initial', 'important');
     document.body.append(host);
+    keepAttached(host);
   }
 
   const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
@@ -137,10 +166,9 @@ function init(options = {}) {
   return window.MfChat;
 }
 
-if (window.MfChat?.init) {
-  // Script included twice on the same page; keep the first instance.
-  console.warn('MfChat: embed.js loaded more than once; ignoring the duplicate.');
-} else {
+// Already loaded: the tag is on the page twice, or the site re-ran it after swapping <body>
+// (Turbo, Livewire). Keep the first instance, which keepAttached() carries over.
+if (!window.MfChat?.init) {
   window.MfChat = {
     init,
     open: () => instance?.open(),

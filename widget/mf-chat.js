@@ -169,17 +169,17 @@ export function mountMfChat(root, opts) {
   };
   if (!o.streamUrl) throw new Error('mountMfChat: streamUrl is required');
 
-  const storage = (key) => ({
+  const storage = (key, area = 'localStorage') => ({
     get: () => {
       try {
-        return localStorage.getItem(key);
+        return window[area].getItem(key);
       } catch {
         return null;
       }
     },
     set: (v) => {
       try {
-        v ? localStorage.setItem(key, v) : localStorage.removeItem(key);
+        v ? window[area].setItem(key, v) : window[area].removeItem(key);
       } catch {
         /* storage unavailable */
       }
@@ -187,6 +187,8 @@ export function mountMfChat(root, opts) {
   });
   const store = storage(o.storageKey);
   const teaserSeen = storage('mf-chat:teaser-seen');
+  // Per tab, so a chat left open carries over to the next page of the site but not to new tabs.
+  const leftOpen = storage('mf-chat:open', 'sessionStorage');
 
   let conversationId = store.get();
   let controller = null;
@@ -755,7 +757,7 @@ export function mountMfChat(root, opts) {
         avatar(),
         el('span', '', `Hi${o.userName ? ` ${o.userName}` : ''}! Have a question about mutual funds? Ask me, I'll explain in simple words.`),
       );
-      bodyBtn.addEventListener('click', open);
+      bodyBtn.addEventListener('click', () => open());
       const dismiss = el('button', 'mfc-icon-btn mfc-teaser-close');
       dismiss.type = 'button';
       dismiss.setAttribute('aria-label', 'Dismiss');
@@ -767,15 +769,17 @@ export function mountMfChat(root, opts) {
   }
 
   const isOpen = () => root.classList.contains('mfc-open');
-  function open() {
+  function open(focus = true) {
     hideTeaser();
     root.classList.add('mfc-open');
     launcher.setAttribute('aria-expanded', 'true');
     // The label text is hidden while open (the launcher becomes a close button).
     launcher.setAttribute('aria-label', 'Close chat');
-    if (finePointer) setTimeout(() => input.focus(), 50);
+    if (o.mode === 'floating') leftOpen.set('1');
+    if (focus && finePointer) setTimeout(() => input.focus(), 50);
   }
   function close() {
+    leftOpen.set(null);
     root.classList.remove('mfc-open');
     launcher.setAttribute('aria-expanded', 'false');
     launcher.removeAttribute('aria-label');
@@ -808,6 +812,8 @@ export function mountMfChat(root, opts) {
   });
 
   syncSend();
+  // Reopen a chat the visitor left open on the previous page, without taking focus from the new page.
+  if (o.mode === 'floating' && leftOpen.get()) open(false);
   // A late settings response still personalises the title and greeting.
   const settings = loadSettings().then(() => {
     syncTitle();
