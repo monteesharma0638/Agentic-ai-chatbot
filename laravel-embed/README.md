@@ -34,7 +34,9 @@ and include it once in your main layout, just before `</body>`:
 @include('partials.mf-chat')
 ```
 
-A chat button appears in the bottom-right corner on every page.
+An orb appears at the bottom centre of every page (centred on the content beside the left sidebar); tapping
+it opens the chat. Set `ASSISTANT_NAME=Samridhi` and `APP_NAME=Robo Rupee` in `agent-service/.env` so the
+assistant introduces itself by name.
 
 ## 4. Allow your site in the Node service
 
@@ -72,9 +74,14 @@ Or from JavaScript, e.g. in a single-page flow:
 @include('partials.mf-chat', ['mfChatMode' => 'inline', 'mfChatTarget' => '#fund-chat'])
 ```
 
-**Branding:** add `data-accent="#4f46e5"` and/or `data-theme="light"` to the script tag.
+**Theme:** the chat follows the app's theme toggle (the `light-theme` class on `<body>`). To fix it instead, add
+`data-theme="dark"`, `"light"` or `"auto"` (follows the device) to the script tag.
 
-**Button wording and first-visit hello:** the floating button reads "Ask about funds", and new
+**Quick questions:** the first time a user opens the chat, the assistant asks five tap-to-answer questions
+(age, experience, goal, when they need the money, how they'd feel about a 20% fall). Users can skip them or
+change their answers later. To turn them off, add `data-onboarding="false"`.
+
+**Orb label and first-visit hello:** hovering the orb shows "Ask Samridhi" (from `ASSISTANT_NAME`), and new
 visitors see a short hello bubble above it once. Change the wording with
 `data-launcher-text="Need help?"`, or turn the hello off with `data-teaser="false"`.
 The greeting uses the logged-in user's first name from the token, and the assistant's name

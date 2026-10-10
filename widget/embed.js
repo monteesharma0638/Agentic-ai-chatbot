@@ -2,20 +2,26 @@
  * Drop-in embed for any website (Laravel Blade, WordPress, plain HTML, …). One tag in the shared
  * header or footer puts the chat on every page (see docs/embed-any-website.md):
  *
- *   <script src="https://chat.example.com/embed.js" data-token="…" defer></script>
+ *   <script src="https://mcp-server-ten-eta.vercel.app/embed.js" data-token="…" defer></script>
  *
  * The conversation, and whether the chat is open, carry over as visitors move between pages,
  * including on sites that swap <body> instead of reloading (Turbo, Livewire wire:navigate, pjax).
+ *
+ * The floating button is an orb at the bottom centre of the page. When the page has the app's left
+ * sidebar (.rr-sidebar), the orb and the chat centre on the content beside it instead of the window.
  *
  * Attributes (all optional):
  *   data-token        Signed user token (see laravel-embed/README.md). Omit for guest mode.
  *   data-mode         "floating" (default) or "inline"
  *   data-target       CSS selector of the container for inline mode
  *   data-title / data-subtitle
- *   data-launcher-text Words on the floating button (default "Ask about funds")
- *   data-teaser       "false" to skip the one-time hello bubble above the button
- *   data-accent       Brand colour, e.g. "#4f46e5"
- *   data-theme        "light" | "dark" (default: follows the OS)
+ *   data-launcher-text Tooltip and label of the orb (default "Ask <assistant name>")
+ *   data-teaser       "false" to skip the one-time hello bubble above the orb
+ *   data-onboarding   "false" to skip the quick questions asked before the first chat
+ *   data-accent       Focus-ring colour, e.g. "#7c5cff"
+ *   data-theme        "light" | "dark" | "auto" (follows the OS). Default: light while the page's <body> has
+ *                     the class "light-theme" (the app's theme toggle), dark otherwise.
+ *   data-offset-x     Shift the orb and chat from the window centre, in px (e.g. "40"); overrides the sidebar check
  *   data-scheme-code  AMFI scheme code of the fund page being viewed ("this fund")
  *   data-scheme-name
  *   data-open         Open the chat panel on load
@@ -88,6 +94,42 @@ function keepAttached(host) {
   reattach();
 }
 
+/**
+ * Fonts declared inside a Shadow DOM aren't loaded, so the widget's typeface is requested from the page
+ * (skipped when the page already loads it, as the app does).
+ */
+function loadFont() {
+  if (document.querySelector('link[href*="Plus+Jakarta+Sans"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap';
+  document.head.append(link);
+}
+
+/**
+ * Calls `fn` now, whenever <body>'s classes change, and when the site swaps <body> during navigation
+ * (Turbo, Livewire wire:navigate, pjax, …).
+ */
+function watchBody(fn) {
+  let body = null;
+  const classes = new MutationObserver(fn);
+  const bind = () => {
+    if (!document.body || body === document.body) return;
+    body = document.body;
+    classes.disconnect();
+    classes.observe(body, { attributes: true, attributeFilter: ['class'] });
+    fn();
+  };
+  new MutationObserver(bind).observe(document.documentElement, { childList: true });
+  bind();
+}
+
+/** Half the width of the app's fixed left sidebar, so the orb sits in the middle of the content beside it. */
+function sidebarOffset() {
+  const rect = document.querySelector('.rr-sidebar')?.getBoundingClientRect();
+  return rect && rect.left <= 0 && rect.right > 0 && rect.right < window.innerWidth / 2 ? rect.right / 2 : 0;
+}
+
 let instance = null;
 /** Context set via MfChat.setContext() before the widget finished loading. */
 let pendingContext;
@@ -125,27 +167,40 @@ function init(options = {}) {
   style.textContent = css;
   const root = document.createElement('div');
   shadow.append(style, root);
+  loadFont();
 
   const accent = opt('accent');
-  if (accent) {
-    root.style.setProperty('--mfc-accent', accent);
-    root.style.setProperty('--mfc-user-bg', accent);
-  }
+  if (accent) root.style.setProperty('--mfc-accent', accent);
   const theme = opt('theme');
-  if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
+  if (theme === 'light' || theme === 'dark' || theme === 'auto') root.dataset.theme = theme;
+  else watchBody(() => (root.dataset.theme = document.body.classList.contains('light-theme') ? 'light' : 'dark'));
+
+  if (mode === 'floating') {
+    const fixed = opt('offsetX');
+    const place = () => root.style.setProperty('--mfc-offset-x', `${Number(fixed ?? sidebarOffset()) || 0}px`);
+    place();
+    if (fixed === undefined) {
+      let frame = 0;
+      window.addEventListener('resize', () => (frame ||= requestAnimationFrame(() => ((frame = 0), place()))));
+      // The sidebar may be added with the rest of a swapped <body>.
+      watchBody(place);
+    }
+  }
 
   const claims = token ? tokenClaims(token) : { uid: 'guest', name: '' };
-  const teaser = opt('teaser');
+  const flag = (key) => opt(key) !== false && opt(key) !== 'false';
   instance = mountMfChat(root, {
     mode,
     ...(opt('title') && { title: opt('title') }),
     ...(opt('subtitle') && { subtitle: opt('subtitle') }),
     ...(opt('launcherText') && { launcherText: opt('launcherText') }),
-    teaser: teaser !== false && teaser !== 'false',
+    teaser: flag('teaser'),
+    onboarding: flag('onboarding'),
     userName: claims.name,
     signedIn: Boolean(token),
     getContext: () => context,
     storageKey: `mf-chat:conversation:${claims.uid}`,
+    profileKey: `mf-chat:profile:${claims.uid}`,
     configUrl: `${apiBase}/api/widget/config`,
     streamUrl: `${apiBase}/api/chat/stream`,
     historyUrl: `${apiBase}/api/conversations/{id}`,

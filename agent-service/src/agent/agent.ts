@@ -248,6 +248,7 @@ export class MfAgent {
         user: req.user,
         hasPortfolio: localTools.some((t) => t.declaration.name === 'get_my_portfolio'),
         page: req.context ?? undefined,
+        profile: req.profile ?? undefined,
       });
 
       let reply = '';

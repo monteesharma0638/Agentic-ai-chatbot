@@ -41,7 +41,13 @@ Restart the service (VPS) or redeploy (Vercel) after changing these.
 
 ## How it behaves across the site
 
-- The chat button sits in the bottom-right corner of every page.
+- The chat opens from an orb at the bottom centre of every page. On pages with the app's left sidebar
+  (`.rr-sidebar`), the orb and the chat centre on the content beside it.
+- The first time someone opens it, the assistant asks five quick questions (age, experience, goal, when
+  they need the money, how they'd feel about a 20% fall) so its answers fit them. They can skip, and change
+  their answers later from the greeting. The answers stay in that browser and go with each message.
+- The chat is dark by default and turns light while the page's `<body>` has the class `light-theme`
+  (the app's theme toggle), switching as soon as the visitor toggles.
 - A conversation continues as the visitor moves between pages, and is kept for
   `CONVERSATION_TTL_HOURS` (24 by default) in that browser.
 - If the visitor leaves the chat open and clicks to another page, it is still open there
@@ -57,18 +63,20 @@ Add any of these attributes to the tag:
 
 ```html
 <script src="https://chat.yourdomain.com/embed.js"
-        data-accent="#4f46e5"
         data-launcher-text="Need help?"
+        data-onboarding="false"
         defer></script>
 ```
 
 | Attribute | What it does |
 | --- | --- |
-| `data-accent` | Brand colour, e.g. `#4f46e5` |
-| `data-theme` | `light` or `dark` (default: follows the visitor's device) |
+| `data-accent` | Colour of the keyboard focus ring, e.g. `#7c5cff` |
+| `data-theme` | `light`, `dark`, or `auto` (follows the visitor's device). Default: follows the page's `light-theme` class, dark otherwise |
 | `data-title` | Name in the chat header (default: `ASSISTANT_NAME`) |
-| `data-launcher-text` | Words on the button (default "Ask about funds") |
-| `data-teaser="false"` | Turn off the one-time hello bubble above the button |
+| `data-launcher-text` | Tooltip and label of the orb (default "Ask" + `ASSISTANT_NAME`) |
+| `data-teaser="false"` | Turn off the one-time hello bubble above the orb |
+| `data-onboarding="false"` | Skip the quick questions before the first chat |
+| `data-offset-x` | Move the orb and chat sideways from the window centre, in px (e.g. `40`); overrides the sidebar check |
 | `data-open` | Open the chat when the page loads |
 | `data-scheme-code` / `data-scheme-name` | On a fund's page, so visitors can ask about "this fund" |
 | `data-token` | Signed-in user token (next section) |

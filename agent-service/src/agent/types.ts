@@ -9,6 +9,22 @@ export interface Holding {
   transactions?: { date: string; amount: number }[];
 }
 
+/** Unknown values (e.g. from an older widget) are dropped rather than failing the whole message. */
+const answer = <T extends [string, ...string[]]>(values: T) => z.enum(values).optional().catch(undefined);
+
+/**
+ * The user's answers to the widget's quick questions before the first chat. Fixed choices only, so
+ * nothing free-form from the browser reaches the system prompt.
+ */
+export const InvestorProfileSchema = z.object({
+  age: answer(['18-35', '36-50', '50+']),
+  experience: answer(['new', 'some', 'regular']),
+  goal: answer(['wealth', 'big_goal', 'retirement', 'tax', 'income']),
+  horizon: answer(['under_3y', '3_7y', 'over_7y']),
+  reaction: answer(['sell', 'wait', 'buy_more']),
+  risk: answer(['conservative', 'moderate', 'aggressive']),
+});
+
 /** Body the widget POSTs. Identity never comes from the body — it comes from the verified token. */
 export const ChatBodySchema = z.object({
   message: z.string().trim().min(1),
@@ -23,10 +39,12 @@ export const ChatBodySchema = z.object({
       scheme_name: z.string().max(200).optional(),
     })
     .nullish(),
+  profile: InvestorProfileSchema.nullish().catch(undefined),
 });
 
 export type ChatBody = z.infer<typeof ChatBodySchema>;
 export type PageContext = NonNullable<ChatBody['context']>;
+export type InvestorProfile = z.infer<typeof InvestorProfileSchema>;
 
 export interface ChatUser {
   /** Verified user id (from the signed token) or `guest:<visitor id>`. */
@@ -41,6 +59,7 @@ export interface ChatInput {
   conversationId?: string;
   user: ChatUser;
   context?: PageContext | null;
+  profile?: InvestorProfile | null;
 }
 
 export interface ChartSeries {

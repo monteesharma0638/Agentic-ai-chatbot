@@ -1,4 +1,46 @@
-import type { ChatUser, PageContext } from './types.js';
+import type { ChatUser, InvestorProfile, PageContext } from './types.js';
+
+/** Fixed wording for each answer to the widget's quick questions. */
+const PROFILE_TEXT: { [K in keyof InvestorProfile]-?: Record<NonNullable<InvestorProfile[K]>, string> } = {
+  age: { '18-35': 'aged 18–35', '36-50': 'aged 36–50', '50+': 'over 50' },
+  experience: {
+    new: 'new to mutual funds',
+    some: 'has invested in mutual funds a little',
+    regular: 'invests in mutual funds regularly',
+  },
+  goal: {
+    wealth: 'investing mainly to grow their wealth',
+    big_goal: 'investing mainly for a big goal (a home, education or a wedding)',
+    retirement: 'investing mainly for retirement',
+    tax: 'investing mainly to save tax',
+    income: 'investing mainly for a regular income',
+  },
+  horizon: {
+    under_3y: 'may need the money within 3 years',
+    '3_7y': 'may need the money in 3 to 7 years',
+    over_7y: 'can stay invested for 7 years or more',
+  },
+  reaction: {
+    sell: 'would take the money out if it fell 20% in a few months',
+    wait: 'would worry but wait if it fell 20% in a few months',
+    buy_more: 'would stay calm or invest more if it fell 20% in a few months',
+  },
+  risk: {
+    conservative: 'comfort with risk looks conservative',
+    moderate: 'comfort with risk looks moderate',
+    aggressive: 'comfort with risk looks high (aggressive)',
+  },
+};
+
+function describeProfile(profile: InvestorProfile): string | null {
+  const parts = (Object.keys(PROFILE_TEXT) as (keyof InvestorProfile)[])
+    .map((key) => {
+      const value = profile[key];
+      return value ? (PROFILE_TEXT[key] as Record<string, string>)[value] : undefined;
+    })
+    .filter(Boolean);
+  return parts.length ? parts.join('; ') : null;
+}
 
 function todayIst(): string {
   return new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
@@ -15,11 +57,19 @@ export function buildSystemInstruction(opts: {
   user: ChatUser;
   hasPortfolio: boolean;
   page?: PageContext;
+  profile?: InvestorProfile;
 }): string {
-  const { appName, assistantName, user, hasPortfolio, page } = opts;
+  const { appName, assistantName, user, hasPortfolio, page, profile } = opts;
   const context: string[] = [];
   if (user.name) context.push(`- User's first name: ${safe(user.name, 40)}`);
   if (user.risk_profile) context.push(`- Risk profile on file: ${safe(user.risk_profile, 40)}`);
+  const about = profile && describeProfile(profile);
+  if (about) {
+    context.push(
+      `- The user's own answers to quick questions at the start of the chat: ${about}. Pitch explanations to their experience ` +
+        '(simpler for someone new) and treat these as answers to the planning questions. Mention them only when relevant.',
+    );
+  }
   if (user.guest) {
     context.push('- The user is a guest (not signed in). For questions about their own holdings, ask them to sign in.');
   }
@@ -93,7 +143,7 @@ When the user wants planning help, don't answer straight away. This includes whe
 3. How much can you invest: every month, or one time?
 4. If its value dropped by 20% for a few months, would you stay calm, feel worried, or want to take it out?
 5. Do you already have some money kept aside for emergencies, or other investments?
-- Skip anything the user already told you (in this message, earlier in the chat, or the risk profile on file). If they have answered everything, go straight to suggestions.
+- Skip anything the user already told you (in this message, earlier in the chat, their answers at the start, or the risk profile on file). Their answers at the start are general: for a specific goal, still ask what they haven't covered, such as the amount. If they have answered everything, go straight to suggestions.
 - Don't call tools or give numbers before they answer; just ask. Their replies may be short ("10 years", "5000 monthly"): read them together with your questions.
 - After they answer, start with one line that sums up what you understood (e.g. "So: ₹5,000 a month for your daughter's education in 12 years, and you're okay with some ups and downs."), then give your suggestions.
 

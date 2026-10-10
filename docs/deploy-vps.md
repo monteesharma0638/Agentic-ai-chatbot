@@ -332,7 +332,7 @@ curl -N https://chat.yourdomain.com/api/chat/stream \
 
 You should see `event: meta`, a tool event, then `event: delta` lines and `event: done`.
 
-Then open your Laravel site while logged in. The chat button appears in the bottom-right corner.
+Then open your Laravel site while logged in. The chat orb appears at the bottom centre.
 
 ## Updating later
 

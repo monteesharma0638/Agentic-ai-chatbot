@@ -6,15 +6,17 @@
  * embed.js by build.mjs; see embed.js for the script-tag integration.
  *
  * Written for everyday investors rather than experts: the assistant greets
- * first, offers questions to tap, says what it is doing while it works, and
- * every error comes with a way forward.
+ * first, asks a few quick questions so its answers fit the person, offers
+ * questions to tap, says what it is doing while it works, and every error
+ * comes with a way forward.
  */
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { CategoryScale, Chart, Legend, LinearScale, LineController, LineElement, PointElement, Tooltip } from 'chart.js';
+import { CategoryScale, Chart, Filler, Legend, LinearScale, LineController, LineElement, PointElement, Tooltip } from 'chart.js';
+import assistantPicture from './assets/assistant.jpg';
 
 // Register only what line charts need, keeping the bundle small.
-Chart.register(LineController, LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend);
+Chart.register(LineController, LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend, Filler);
 
 const GENERAL_SUGGESTIONS = [
   'What is a SIP, and how does it work?',
@@ -30,6 +32,80 @@ const FUND_PAGE_SUGGESTIONS = [
   'What is NAV, in simple words?',
 ];
 
+/**
+ * Asked once, before the first chat, so answers fit the person: the same facts the assistant needs before any
+ * planning suggestion (age, goal, time, and how they'd feel about a fall). The values are what the server accepts.
+ */
+const QUESTIONS = [
+  {
+    key: 'age',
+    title: 'How old are you?',
+    options: [
+      ['18-35', '18–35 years'],
+      ['36-50', '36–50 years'],
+      ['50+', 'Over 50'],
+    ],
+  },
+  {
+    key: 'experience',
+    title: 'Have you invested in mutual funds before?',
+    options: [
+      ['new', "No, I'm new to this"],
+      ['some', 'Yes, a little'],
+      ['regular', 'Yes, I invest regularly'],
+    ],
+  },
+  {
+    key: 'goal',
+    title: 'What are you mainly investing for?',
+    options: [
+      ['wealth', 'Growing my wealth'],
+      ['big_goal', 'A big goal: a home, education or a wedding'],
+      ['retirement', 'Retirement'],
+      ['tax', 'Saving tax'],
+      ['income', 'A regular income'],
+    ],
+  },
+  {
+    key: 'horizon',
+    title: 'When might you need this money?',
+    options: [
+      ['under_3y', 'Within 3 years'],
+      ['3_7y', 'In 3 to 7 years'],
+      ['over_7y', 'After 7 years or more'],
+    ],
+  },
+  {
+    key: 'reaction',
+    title: 'If your investment fell 20% in a few months, what would you do?',
+    options: [
+      ['sell', 'Take my money out'],
+      ['wait', 'Worry, but wait it out'],
+      ['buy_more', 'Stay calm, or even invest more'],
+    ],
+  },
+];
+const PROFILE_KEYS = ['age', 'experience', 'goal', 'horizon', 'reaction', 'risk'];
+const POINTS = {
+  age: { '18-35': 5, '36-50': 3, '50+': 1 },
+  horizon: { under_3y: 1, '3_7y': 3, over_7y: 5 },
+  reaction: { sell: 1, wait: 3, buy_more: 5 },
+};
+const RISK_TEXT = {
+  conservative: "you'd rather keep your money steady, even if it grows slowly.",
+  moderate: "you're okay with some ups and downs for better growth over time.",
+  aggressive: "you're comfortable with bigger ups and downs for higher growth over many years.",
+};
+
+/** A gentle read of comfort with risk from age, time and the reaction to a fall; someone who'd sell in a fall is never "aggressive". */
+function riskOf(a) {
+  if (!a.age || !a.horizon || !a.reaction) return undefined;
+  const score = POINTS.age[a.age] + POINTS.horizon[a.horizon] + POINTS.reaction[a.reaction];
+  if (a.reaction === 'sell' || score <= 7) return 'conservative';
+  if (score >= 12 && a.reaction === 'buy_more') return 'aggressive';
+  return 'moderate';
+}
+
 const ERRORS = {
   401: 'Your session has timed out. Refresh the page to keep chatting.',
   403: 'The assistant is not available for your account.',
@@ -40,6 +116,8 @@ const ERRORS = {
 /** Errors that retrying the same message won't fix. */
 const FINAL_ERRORS = new Set(['blocked', 'auth_required', 'message_too_long', 'invalid_request', 'origin_not_allowed']);
 const SLOW_AFTER_MS = 10_000;
+/** Pause before the next question appears, as if the assistant were replying. */
+const REVEAL_MS = 350;
 
 const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 });
 
@@ -54,13 +132,17 @@ function el(tag, className, text) {
  * Renders markdown into a bubble; a closing italic-only paragraph (the risk line) is shown as a quiet note.
  * Answers never send people to other websites: links and images are dropped (their text is kept).
  */
-function renderInto(bubble, text) {
-  bubble.innerHTML = DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true }), { FORBID_TAGS: ['a', 'img'] });
-  const last = bubble.lastElementChild;
+function renderInto(target, text) {
+  target.innerHTML = DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true }), { FORBID_TAGS: ['a', 'img'] });
+  const last = target.lastElementChild;
   if (last?.tagName === 'P' && last.childNodes.length === 1 && last.firstChild.nodeName === 'EM') {
     last.classList.add('mfc-note');
   }
 }
+
+/** 09:41 AM */
+const clock = (date = new Date()) =>
+  date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
 
 const dateOf = (iso) => new Date(`${iso}T00:00:00Z`);
 /** 2020-03-23 → 23 Mar 2020 */
@@ -85,10 +167,13 @@ function compactInr(v) {
   return `₹${inr.format(v)}`;
 }
 
-function greeting(name) {
-  const h = new Date().getHours();
-  const part = h >= 4 && h < 12 ? 'Good morning' : h >= 12 && h < 17 ? 'Good afternoon' : h >= 17 ? 'Good evening' : 'Hello';
-  return name ? `${part}, ${name}!` : `${part}!`;
+/** #2fe08a → rgba(47, 224, 138, a), for the fade under a line; other colour formats get no fade. */
+function withAlpha(hex, a) {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex);
+  if (!m) return 'transparent';
+  const h = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1];
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
 /** Parses a fetch() SSE body into {event, data} objects. */
@@ -119,23 +204,34 @@ async function* readSse(response) {
   }
 }
 
+/** Line icons in the style the app uses (Lucide). */
+const icon = (paths) =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 const ICONS = {
-  // The assistant's face: a sprout, for money that grows over time.
-  sprout:
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21v-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M12 13c0-3.9-2.9-6.5-7-6.5 0 3.9 2.9 6.5 7 6.5z" fill="currentColor"/><path d="M12 11.5c0-3.6 2.6-6.5 7-6.5 0 3.9-2.9 6.5-7 6.5z" fill="currentColor"/></svg>',
-  close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
-  send: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-2.5-6.5L4 12z" fill="currentColor"/></svg>',
-  stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>',
-  plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
-  copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 15V6a2 2 0 0 1 2-2h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
-  share:
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 12v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  back: icon('<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'),
+  close: icon('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
+  send: icon('<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>'),
+  stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>',
+  plus: icon('<path d="M5 12h14"/><path d="M12 5v14"/>'),
+  copy: icon('<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>'),
+  share: icon('<path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>'),
 };
 
-function avatar(extra = '') {
-  const node = el('span', `mfc-avatar ${extra}`.trim());
-  node.innerHTML = ICONS.sprout;
+function avatar() {
+  const node = el('span', 'mfc-avatar');
+  node.setAttribute('aria-hidden', 'true');
   return node;
+}
+
+/** The app's glass button: a frosted pill with a gradient edge and a sheen that sweeps across on hover. */
+function glassButton(label, size = '') {
+  const btn = el('button', `mfc-glass ${size}`.trim());
+  btn.type = 'button';
+  const content = el('span', 'mfc-glass-content');
+  if (typeof label === 'string') content.textContent = label;
+  else content.append(...label);
+  btn.append(el('span', 'mfc-glass-border'), el('span', 'mfc-glass-highlight'), el('span', 'mfc-glass-shine'), content);
+  return btn;
 }
 
 /**
@@ -144,12 +240,14 @@ function avatar(extra = '') {
  * @param {string} opts.streamUrl         POST endpoint returning text/event-stream
  * @param {string} [opts.historyUrl]      GET template with {id}, returns {messages:[...]}
  * @param {string} [opts.resetUrl]        DELETE template with {id}
- * @param {string} [opts.configUrl]       GET endpoint returning {assistant_name, portfolio}
+ * @param {string} [opts.configUrl]       GET endpoint returning {assistant_name, app_name, portfolio}
  * @param {object|Function} [opts.headers] Extra request headers (e.g. CSRF token)
  * @param {Function} [opts.body]          Returns extra JSON fields merged into each request
  * @param {Function} [opts.getContext]    Returns the page context ({scheme_code}) for "this fund" suggestions
  * @param {'floating'|'inline'} [opts.mode]
  * @param {string} [opts.storageKey]      localStorage key for the conversation id
+ * @param {string} [opts.profileKey]      localStorage key for the answers to the quick questions
+ * @param {boolean} [opts.onboarding]     Ask the quick questions before the first chat (default true)
  * @param {string} [opts.userName]        First name, used in the greeting
  * @param {boolean} [opts.signedIn]       Offer "my investments" questions
  * @param {boolean} [opts.teaser]         Show a one-time hello above the launcher (floating mode)
@@ -158,11 +256,12 @@ export function mountMfChat(root, opts) {
   const o = {
     mode: 'floating',
     subtitle: 'Answers in simple words',
-    placeholder: 'Type your question…',
-    launcherText: 'Ask about funds',
+    placeholder: 'Type a message…',
     disclaimer:
       'Information only, not investment advice. Mutual fund investments are subject to market risks, read all scheme related documents carefully.',
     storageKey: 'mf-chat:conversation',
+    profileKey: 'mf-chat:profile',
+    onboarding: true,
     credentials: 'same-origin',
     teaser: true,
     ...opts,
@@ -186,6 +285,7 @@ export function mountMfChat(root, opts) {
     },
   });
   const store = storage(o.storageKey);
+  const profileStore = storage(o.profileKey);
   const teaserSeen = storage('mf-chat:teaser-seen');
   // Per tab, so a chat left open carries over to the next page of the site but not to new tabs.
   const leftOpen = storage('mf-chat:open', 'sessionStorage');
@@ -193,38 +293,49 @@ export function mountMfChat(root, opts) {
   let conversationId = store.get();
   let controller = null;
   const charts = [];
-  const features = { assistantName: '', portfolio: false };
+  const features = { assistantName: '', appName: '', portfolio: false };
   // Touch devices: don't pop the keyboard up over an answer the person is about to read.
   const finePointer = window.matchMedia?.('(pointer: fine)').matches ?? true;
 
+  /** Saved answers ({...answers, risk, done} or {skipped}), or null if the questions were never offered. */
+  let profile = null;
+  try {
+    profile = JSON.parse(profileStore.get() || 'null');
+  } catch {
+    /* unreadable: ask again */
+  }
+  /** The questions being answered right now: their answers so far. */
+  let intro = null;
+
   // ---------- DOM ----------
   root.classList.add('mfc-root', `mfc-${o.mode}`);
+  root.style.setProperty('--mfc-logo', `url("${assistantPicture}")`);
   root.innerHTML = '';
 
   const launcher = el('button', 'mfc-launcher');
   launcher.type = 'button';
   launcher.setAttribute('aria-expanded', 'false');
-  const launcherClose = el('span', 'mfc-launcher-close');
-  launcherClose.innerHTML = ICONS.close;
-  launcher.append(avatar(), el('span', 'mfc-launcher-text', o.launcherText), launcherClose);
+  launcher.append(el('span', 'mfc-orb-face'));
+  const tooltip = el('span', 'mfc-tooltip');
+  tooltip.setAttribute('aria-hidden', 'true');
 
   const panel = el('section', 'mfc-panel');
+  const card = el('div', 'mfc-card');
 
   const header = el('header', 'mfc-header');
+  const closeBtn = el('button', 'mfc-back');
+  closeBtn.type = 'button';
+  closeBtn.setAttribute('aria-label', 'Close chat');
+  closeBtn.innerHTML = ICONS.back;
   const heading = el('div', 'mfc-heading');
   const titleEl = el('strong', 'mfc-title', o.title ?? '');
   const subtitleEl = el('span', 'mfc-subtitle');
   subtitleEl.append(el('i', 'mfc-online'), document.createTextNode(o.subtitle));
   heading.append(titleEl, subtitleEl);
-  const resetBtn = el('button', 'mfc-text-btn mfc-new');
-  resetBtn.type = 'button';
-  resetBtn.innerHTML = ICONS.plus;
-  resetBtn.append('New chat');
-  const closeBtn = el('button', 'mfc-icon-btn mfc-close');
-  closeBtn.type = 'button';
-  closeBtn.setAttribute('aria-label', 'Close chat');
-  closeBtn.innerHTML = ICONS.close;
-  header.append(avatar('mfc-avatar-lg'), heading, resetBtn, closeBtn);
+  const plus = el('span');
+  plus.innerHTML = ICONS.plus;
+  const resetBtn = glassButton([plus.firstChild, 'New chat'], 'mfc-glass-xs mfc-new');
+  header.append(closeBtn, heading, resetBtn);
 
   const log = el('div', 'mfc-log');
   log.setAttribute('role', 'log');
@@ -232,8 +343,11 @@ export function mountMfChat(root, opts) {
 
   // The assistant speaks first: a greeting and a few questions to tap.
   const welcome = el('div', 'mfc-msg mfc-assistant mfc-welcome');
+  let welcomeAfterQuestions = false;
 
+  const footer = el('div', 'mfc-footer');
   const form = el('form', 'mfc-composer');
+  const bar = el('div', 'mfc-input-bar');
   const input = el('textarea', 'mfc-input');
   input.rows = 1;
   input.placeholder = o.placeholder;
@@ -241,20 +355,26 @@ export function mountMfChat(root, opts) {
   input.setAttribute('aria-label', 'Your question');
   input.setAttribute('enterkeyhint', 'send');
   const sendBtn = el('button', 'mfc-send');
-  form.append(input, sendBtn);
+  bar.append(input, sendBtn);
+  form.append(bar);
+  footer.append(form, el('p', 'mfc-disclaimer', o.disclaimer));
 
-  const footer = el('p', 'mfc-disclaimer', o.disclaimer);
-  panel.append(header, log, form, footer);
+  card.append(header, log, footer);
+  panel.append(card);
   root.append(panel);
-  if (o.mode === 'floating') root.append(launcher);
+  if (o.mode === 'floating') root.append(launcher, tooltip);
 
+  const launcherLabel = () => o.launcherText || (features.assistantName ? `Ask ${features.assistantName}` : 'Ask about funds');
   const syncTitle = () => {
     const title = o.title || features.assistantName || 'Fund Assistant';
     titleEl.textContent = title;
     panel.setAttribute('aria-label', title);
+    tooltip.textContent = launcherLabel();
+    if (!isOpen()) launcher.setAttribute('aria-label', launcherLabel());
   };
   // Without an explicit title, wait for the assistant's name rather than flashing a placeholder.
   if (o.title) syncTitle();
+  else launcher.setAttribute('aria-label', launcherLabel());
 
   // ---------- helpers ----------
   const scrollToEnd = () => {
@@ -285,69 +405,234 @@ export function mountMfChat(root, opts) {
     return o.signedIn && features.portfolio ? [PORTFOLIO_SUGGESTION, ...GENERAL_SUGGESTIONS.slice(0, 3)] : GENERAL_SUGGESTIONS;
   }
 
-  function renderWelcome() {
-    const body = el('div', 'mfc-body');
+  /** A message row (not yet in the log) with its bubble, text area and time; `wrap` lets the welcome reuse its element. */
+  function messageRow(role, wrap = el('div', `mfc-msg mfc-${role}`)) {
     const bubble = el('div', 'mfc-bubble');
-    const name = features.assistantName;
-    bubble.append(
-      el('p', 'mfc-greeting', greeting(o.userName)),
-      el(
-        'p',
-        '',
-        `${name ? `I'm ${name}, and I` : 'I'} can help you understand mutual funds in simple words. ` +
-          'Ask me how a fund has done, what a SIP could be worth today, or what a term like NAV means.',
-      ),
-      el('p', 'mfc-hint', 'Tap a question below, or type your own.'),
-    );
-    const chips = el('div', 'mfc-suggestions');
-    for (const s of suggestions()) {
-      const chip = el('button', 'mfc-chip', s);
-      chip.type = 'button';
-      chip.addEventListener('click', () => send(s));
-      chips.append(chip);
-    }
-    body.append(bubble, chips);
-    welcome.replaceChildren(avatar(), body);
-  }
-
-  /** Re-renders the greeting (e.g. after the settings load or the page context changes) while it is still showing. */
-  function refreshWelcome() {
-    if (welcome.isConnected) renderWelcome();
-  }
-
-  function addMessage(role, text = '') {
-    welcome.remove();
-    root.classList.add('mfc-has-messages');
-    const wrap = el('div', `mfc-msg mfc-${role}`);
-    const bubble = el('div', 'mfc-bubble');
+    const content = el('div', 'mfc-md');
+    const time = el('div', 'mfc-time');
+    bubble.append(content, time);
     let body = wrap;
     if (role === 'assistant') {
       body = el('div', 'mfc-body');
       body.append(bubble);
       wrap.append(avatar(), body);
-      if (text) renderInto(bubble, text);
     } else {
-      bubble.textContent = text;
       wrap.append(bubble);
     }
-    log.append(wrap);
-    scrollToEnd();
-    return { wrap, body, bubble };
+    return { wrap, body, bubble, content, time };
   }
 
-  function actionButton(icon, label) {
+  /** 09:41 AM ✓ while sending, ✓✓ once the assistant has the message. */
+  const stampUser = (time, at, delivered) => {
+    time.textContent = `${clock(at)} ${delivered ? '✓✓' : '✓'}`;
+  };
+
+  function renderWelcome() {
+    const { body, content, time } = messageRow('assistant', welcome);
+    const name = features.assistantName;
+    if (welcomeAfterQuestions && profile?.done) {
+      const thanks = el('p', 'mfc-greeting', `Thanks${o.userName ? `, ${o.userName}` : ''}! I'll keep your answers in mind.`);
+      content.append(thanks);
+      if (profile.risk) {
+        const summary = el('p');
+        summary.append('From your answers, you seem to be a ', el('strong', '', `${profile.risk} investor`), `: ${RISK_TEXT[profile.risk]}`);
+        content.append(summary);
+      }
+      content.append(el('p', '', 'What would you like to know?'));
+    } else {
+      content.append(
+        el('p', 'mfc-greeting', `Hello${o.userName ? ` ${o.userName}` : ''}🙏, what's on your mind?`),
+        el(
+          'p',
+          '',
+          `${name ? `I'm ${name}, and I` : 'I'} can help you understand mutual funds in simple words. ` +
+            'Ask me how a fund has done, what a SIP could be worth today, or what a term like NAV means.',
+        ),
+      );
+    }
+    content.append(el('p', 'mfc-hint', 'Tap a question below, or type your own.'));
+    if (profile?.done && o.onboarding) {
+      const change = el('button', 'mfc-link', 'Change my answers');
+      change.type = 'button';
+      change.addEventListener('click', changeAnswers);
+      content.append(change);
+    }
+    time.textContent = clock();
+    const chips = el('div', 'mfc-suggestions');
+    for (const s of suggestions()) {
+      const chip = glassButton(s, 'mfc-glass-sm');
+      chip.addEventListener('click', () => send(s));
+      chips.append(chip);
+    }
+    body.append(chips);
+  }
+
+  /** Re-renders the greeting (e.g. after the settings load or the page context changes) while it is still showing. */
+  function refreshWelcome() {
+    if (!welcome.isConnected) return;
+    welcome.replaceChildren();
+    renderWelcome();
+  }
+
+  function showWelcome() {
+    welcome.replaceChildren();
+    renderWelcome();
+    log.append(welcome);
+    scrollToEnd();
+  }
+
+  function addMessage(role, text = '', at) {
+    welcome.remove();
+    root.classList.add('mfc-has-messages');
+    const row = messageRow(role);
+    if (role === 'assistant') {
+      if (text) renderInto(row.content, text);
+      if (at) row.time.textContent = clock(new Date(at));
+    } else {
+      row.content.textContent = text;
+      stampUser(row.time, at ? new Date(at) : new Date(), Boolean(at));
+    }
+    log.append(row.wrap);
+    scrollToEnd();
+    return row;
+  }
+
+  // ---------- quick questions before the first chat ----------
+  const saveProfile = (next) => {
+    profile = next;
+    profileStore.set(JSON.stringify(next));
+  };
+  const needsQuestions = () => o.onboarding && !profile;
+
+  /** Answers to send with each message: the saved ones, or those given so far. */
+  function requestProfile() {
+    const src = profile ?? intro?.answers;
+    const out = {};
+    for (const k of PROFILE_KEYS) if (src?.[k]) out[k] = src[k];
+    return Object.keys(out).length ? out : null;
+  }
+
+  /** An assistant message in the question flow; these don't count as the conversation (no "New chat" yet). */
+  function introBubble(className = '') {
+    const row = messageRow('assistant');
+    if (className) row.wrap.classList.add(className);
+    row.wrap.classList.add('mfc-reveal');
+    row.time.textContent = clock();
+    log.append(row.wrap);
+    return row;
+  }
+  function introReply(text) {
+    const row = messageRow('user');
+    row.content.textContent = text;
+    stampUser(row.time, new Date(), true);
+    log.append(row.wrap);
+    scrollToEnd();
+  }
+  const later = (fn) => setTimeout(fn, REVEAL_MS);
+
+  function startQuestions() {
+    intro = { answers: {} };
+    const { content } = introBubble();
+    const name = features.assistantName;
+    content.append(
+      el('p', '', name ? `Hello! I am ${name}🙏🏽` : 'Hello!🙏🏽'),
+      ...(features.appName ? [el('p', '', `Your investing companion at ${features.appName}.`)] : []),
+      el('p', '', "I'm here to help you understand mutual funds and answer your questions in simple words."),
+      el('p', '', 'A few quick questions first, so my answers fit you. It takes less than a minute.'),
+      el('p', '', 'How would you like to begin?'),
+    );
+    const choices = el('div', 'mfc-choices');
+    const fit = glassButton('Help me find my fit');
+    const know = glassButton('I know what I want');
+    choices.append(fit, el('span', 'mfc-or', 'OR'), know);
+    content.append(choices);
+    const choose = (label, next) => {
+      fit.disabled = know.disabled = true;
+      introReply(label);
+      later(next);
+    };
+    fit.addEventListener('click', () => choose('Help me find my fit', () => ask(0)));
+    know.addEventListener('click', () =>
+      choose('I know what I want', () => {
+        intro = null;
+        saveProfile({ skipped: true });
+        welcomeAfterQuestions = false;
+        showWelcome();
+      }),
+    );
+    scrollToEnd();
+  }
+
+  function ask(index) {
+    if (!intro) return;
+    const q = QUESTIONS[index];
+    const { content } = introBubble('mfc-question');
+    content.append(el('p', 'mfc-q-title', q.title));
+    const group = el('div', 'mfc-options');
+    group.setAttribute('role', 'radiogroup');
+    group.setAttribute('aria-label', q.title);
+    for (const [value, label] of q.options) {
+      const option = el('button', 'mfc-option');
+      option.type = 'button';
+      option.setAttribute('role', 'radio');
+      option.setAttribute('aria-checked', String(intro.previous?.[q.key] === value));
+      option.append(el('span', 'mfc-dot'), el('span', '', label));
+      option.addEventListener('click', () => {
+        if (!intro) return;
+        for (const b of group.children) {
+          b.setAttribute('aria-checked', String(b === option));
+          b.disabled = true;
+        }
+        intro.answers[q.key] = value;
+        introReply(label);
+        later(() => (index + 1 < QUESTIONS.length ? ask(index + 1) : finishQuestions()));
+      });
+      group.append(option);
+    }
+    content.append(group);
+    scrollToEnd();
+  }
+
+  function finishQuestions() {
+    if (!intro) return;
+    const { answers } = intro;
+    intro = null;
+    const risk = riskOf(answers);
+    saveProfile({ ...answers, ...(risk && { risk }), done: true });
+    welcomeAfterQuestions = true;
+    showWelcome();
+  }
+
+  function changeAnswers() {
+    if (controller) return;
+    const previous = profile;
+    welcome.remove();
+    introReply('Change my answers');
+    intro = { answers: {}, previous };
+    later(() => ask(0));
+  }
+
+  /** Typing instead of answering ends the questions; answers given so far are kept and the rest are skipped. */
+  function endQuestions() {
+    if (!intro) return;
+    for (const b of log.querySelectorAll('.mfc-option, .mfc-choices .mfc-glass')) b.disabled = true;
+    if (!intro.previous) saveProfile({ ...intro.answers, skipped: true });
+    intro = null;
+  }
+
+  function actionButton(iconSvg, label) {
     const btn = el('button', 'mfc-action');
     btn.type = 'button';
-    btn.innerHTML = icon;
+    btn.innerHTML = iconSvg;
     const text = el('span', '', label);
     btn.append(text);
     return { btn, text };
   }
 
   /** Copy, plus the device's own share menu where there is one, under a finished answer. */
-  function addActions(body, bubble) {
-    const bar = el('div', 'mfc-actions');
-    const answerText = () => bubble.innerText.trim();
+  function addActions(body, content) {
+    const actions = el('div', 'mfc-actions');
+    const answerText = () => content.innerText.trim();
 
     const copy = actionButton(ICONS.copy, 'Copy');
     copy.btn.addEventListener('click', async () => {
@@ -360,13 +645,13 @@ export function mountMfChat(root, opts) {
       setTimeout(() => (copy.text.textContent = 'Copy'), 2000);
     });
 
-    bar.append(copy.btn);
+    actions.append(copy.btn);
     if (typeof navigator.share === 'function') {
       const share = actionButton(ICONS.share, 'Share');
       share.btn.addEventListener('click', () => navigator.share({ text: answerText() }).catch(() => {}));
-      bar.append(share.btn);
+      actions.append(share.btn);
     }
-    body.append(bar);
+    body.append(actions);
   }
 
   function addChart(container, chart) {
@@ -459,6 +744,43 @@ export function mountMfChat(root, opts) {
     figure.append(layout);
   }
 
+  /** Line colours come from the theme, so they're re-read whenever the theme changes. */
+  function lineTheme() {
+    const css = getComputedStyle(root);
+    const read = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
+    return {
+      line: read('--mfc-line', '#2fe08a'),
+      quiet: read('--mfc-chart-2', '#6b6880'),
+      muted: read('--mfc-muted', '#7d7896'),
+      grid: read('--mfc-grid', 'rgba(127,127,127,.15)'),
+    };
+  }
+
+  function applyLineTheme(instance) {
+    const t = lineTheme();
+    const last = instance.data.datasets.length - 1;
+    instance.data.datasets.forEach((d, i) => {
+      const headline = i === last;
+      d.borderColor = headline ? t.line : t.quiet;
+      d.pointBackgroundColor = d.borderColor;
+      // The headline (e.g. "What it grew to") fades into the card like the app's portfolio chart.
+      d.fill = headline ? 'origin' : false;
+      d.backgroundColor = headline
+        ? ({ chart: c }) => {
+            if (!c.chartArea) return 'transparent';
+            const g = c.ctx.createLinearGradient(0, c.chartArea.top, 0, c.chartArea.bottom);
+            g.addColorStop(0, withAlpha(t.line, 0.45));
+            g.addColorStop(1, withAlpha(t.line, 0));
+            return g;
+          }
+        : t.quiet;
+    });
+    instance.options.plugins.legend.labels.color = t.muted;
+    instance.options.scales.x.ticks.color = t.muted;
+    instance.options.scales.y.ticks.color = t.muted;
+    instance.options.scales.y.grid.color = t.grid;
+  }
+
   function drawLine(figure, chart) {
     const box = el('div', 'mfc-chart-box');
     const canvas = el('canvas');
@@ -467,65 +789,69 @@ export function mountMfChat(root, opts) {
     box.append(canvas);
     figure.append(box);
 
-    const css = getComputedStyle(root);
-    const accent = css.getPropertyValue('--mfc-accent').trim() || '#0b7a5a';
-    const quiet = css.getPropertyValue('--mfc-chart-2').trim() || '#9aa5a0';
-    const muted = css.getPropertyValue('--mfc-muted').trim() || '#62706b';
     const dates = chart.series[0].points.map((p) => p[0]);
-    const last = chart.series.length - 1;
-    charts.push(
-      new Chart(canvas, {
-        type: 'line',
-        data: {
-          labels: dates,
-          // The last series is the headline (e.g. "What it grew to"); earlier ones are grey context.
-          datasets: chart.series.map((s, i) => ({
-            label: s.name,
-            data: s.points.map((p) => p[1]),
-            borderColor: i === last ? accent : quiet,
-            backgroundColor: i === last ? accent : quiet,
-            borderWidth: 2,
-            borderCapStyle: 'round',
-            borderJoinStyle: 'round',
-            pointRadius: 0,
-            pointHitRadius: 10,
-            tension: 0.2,
-          })),
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { display: chart.series.length > 1, labels: { color: muted, boxWidth: 12, boxHeight: 2 } },
-            tooltip: {
-              callbacks: {
-                title: (items) => longDate(dates[items[0].dataIndex]),
-                label: (ctx) => ` ${ctx.dataset.label}: ₹${inr.format(ctx.parsed.y)}`,
-              },
+    const instance = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: dates,
+        // The last series is the headline (e.g. "What it grew to"); earlier ones are grey context.
+        datasets: chart.series.map((s) => ({
+          label: s.name,
+          data: s.points.map((p) => p[1]),
+          borderWidth: 2,
+          borderCapStyle: 'round',
+          borderJoinStyle: 'round',
+          pointRadius: 0,
+          pointHitRadius: 10,
+          tension: 0.2,
+        })),
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: chart.series.length > 1, labels: { boxWidth: 12, boxHeight: 2 } },
+          tooltip: {
+            callbacks: {
+              title: (items) => longDate(dates[items[0].dataIndex]),
+              label: (ctx) => ` ${ctx.dataset.label}: ₹${inr.format(ctx.parsed.y)}`,
             },
           },
-          scales: {
-            x: {
-              ticks: { color: muted, maxTicksLimit: 4, maxRotation: 0, callback: (v) => monthYear(dates[v]) },
-              grid: { display: false },
-            },
-            y: { ticks: { color: muted, maxTicksLimit: 5, callback: compactInr }, grid: { color: 'rgba(127,127,127,.15)' } },
-          },
         },
-      }),
-    );
+        scales: {
+          x: {
+            ticks: { maxTicksLimit: 4, maxRotation: 0, callback: (v) => monthYear(dates[v]) },
+            grid: { display: false },
+          },
+          y: { ticks: { maxTicksLimit: 5, callback: compactInr }, grid: {} },
+        },
+      },
+    });
+    applyLineTheme(instance);
+    instance.update('none');
+    charts.push(instance);
     scrollToEnd();
   }
 
+  /** Repaints line charts in the current theme (the host page's theme toggle, or the OS switching). */
+  function restyleCharts() {
+    for (const c of charts) {
+      applyLineTheme(c);
+      c.update('none');
+    }
+  }
+  new MutationObserver(restyleCharts).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  window.matchMedia?.('(prefers-color-scheme: light)').addEventListener?.('change', restyleCharts);
+
   function addError(message, action) {
-    const { wrap, body, bubble } = addMessage('assistant');
+    const { wrap, body, content, time } = addMessage('assistant');
     wrap.classList.add('mfc-error');
-    bubble.textContent = message;
+    content.textContent = message;
+    time.textContent = clock();
     if (action) {
-      const btn = el('button', 'mfc-retry', action.label);
-      btn.type = 'button';
+      const btn = glassButton(action.label, 'mfc-glass-sm mfc-retry');
       btn.addEventListener('click', action.run);
       body.append(btn);
     }
@@ -543,15 +869,17 @@ export function mountMfChat(root, opts) {
   async function send(text) {
     const message = (text ?? input.value).trim();
     if (!message || controller) return;
+    endQuestions();
     input.value = '';
     autosize();
-    const { wrap: userWrap } = addMessage('user', message);
-    const { wrap, body, bubble } = addMessage('assistant');
+    const { wrap: userWrap, time: userTime } = addMessage('user', message);
+    const sentAt = new Date();
+    const { wrap, body, content, time } = addMessage('assistant');
     wrap.classList.add('mfc-pending');
     const typing = el('span', 'mfc-typing');
     typing.setAttribute('aria-label', 'Typing');
     typing.append(el('i'), el('i'), el('i'));
-    bubble.append(typing);
+    content.append(typing);
 
     let reply = '';
     let frame = 0;
@@ -561,6 +889,7 @@ export function mountMfChat(root, opts) {
     const running = new Map(); // tool call id -> label
     let label = '';
     let slow = false;
+    const bubble = content.parentElement;
     const showStatus = (next) => {
       label = next ?? label;
       const lines = [];
@@ -580,7 +909,7 @@ export function mountMfChat(root, opts) {
       frame = 0;
       // Follow the answer only if the reader hasn't scrolled up to read the start of it.
       const stick = nearBottom();
-      renderInto(bubble, reply);
+      renderInto(content, reply);
       if (stick) scrollToEnd();
     };
 
@@ -588,11 +917,17 @@ export function mountMfChat(root, opts) {
     setBusy(true);
     try {
       const extra = typeof o.body === 'function' ? o.body() : {};
+      const answers = requestProfile();
       const res = await fetch(o.streamUrl, {
         method: 'POST',
         headers: headers(),
         credentials: o.credentials,
-        body: JSON.stringify({ ...extra, message, ...(conversationId && { conversation_id: conversationId }) }),
+        body: JSON.stringify({
+          ...extra,
+          ...(answers && { profile: answers }),
+          message,
+          ...(conversationId && { conversation_id: conversationId }),
+        }),
         signal: controller.signal,
       });
       const isStream = (res.headers.get('content-type') || '').includes('text/event-stream');
@@ -614,6 +949,7 @@ export function mountMfChat(root, opts) {
           case 'meta':
             conversationId = ev.conversation_id;
             store.set(conversationId);
+            stampUser(userTime, sentAt, true);
             break;
           case 'tool_start':
             running.set(ev.id, ev.label);
@@ -645,8 +981,11 @@ export function mountMfChat(root, opts) {
       }
       if (frame) cancelAnimationFrame(frame);
       if (!reply.trim()) throw Object.assign(new Error(ERRORS.generic), { shown: true });
+      const stick = nearBottom();
       paint();
-      addActions(body, bubble);
+      time.textContent = clock();
+      addActions(body, content);
+      if (stick) scrollToEnd();
     } catch (err) {
       if (frame) cancelAnimationFrame(frame);
       if (err.name === 'AbortError') {
@@ -696,10 +1035,10 @@ export function mountMfChat(root, opts) {
       if (!res.ok) return;
       const { messages = [] } = await res.json();
       for (const m of messages) {
-        const { body, bubble } = addMessage(m.role, m.text);
+        const { body, content } = addMessage(m.role, m.text, m.at);
         if (m.role !== 'assistant') continue;
         for (const c of m.charts ?? []) addChart(body, c);
-        addActions(body, bubble);
+        addActions(body, content);
       }
     } catch {
       /* history is best-effort */
@@ -713,10 +1052,17 @@ export function mountMfChat(root, opts) {
       if (!res.ok) return;
       const c = await res.json();
       features.assistantName = typeof c.assistant_name === 'string' ? c.assistant_name : '';
+      features.appName = typeof c.app_name === 'string' ? c.app_name : '';
       features.portfolio = Boolean(c.portfolio);
     } catch {
       /* settings only personalise the greeting */
     }
+  }
+
+  /** First thing in an empty chat: the quick questions if they were never offered, otherwise the greeting. */
+  function greet() {
+    if (needsQuestions()) startQuestions();
+    else showWelcome();
   }
 
   function reset() {
@@ -730,15 +1076,16 @@ export function mountMfChat(root, opts) {
     }
     conversationId = null;
     store.set(null);
+    intro = null;
+    welcomeAfterQuestions = false;
     charts.splice(0).forEach((c) => c.destroy());
     log.replaceChildren();
     root.classList.remove('mfc-has-messages');
-    renderWelcome();
-    log.append(welcome);
+    greet();
     if (finePointer) input.focus();
   }
 
-  // ---------- one-time hello above the launcher ----------
+  // ---------- one-time hello above the orb ----------
   let teaser = null;
   let teaserTimer = 0;
   const hideTeaser = () => {
@@ -758,7 +1105,7 @@ export function mountMfChat(root, opts) {
         el('span', '', `Hi${o.userName ? ` ${o.userName}` : ''}! Have a question about mutual funds? Ask me, I'll explain in simple words.`),
       );
       bodyBtn.addEventListener('click', () => open());
-      const dismiss = el('button', 'mfc-icon-btn mfc-teaser-close');
+      const dismiss = el('button', 'mfc-icon-btn');
       dismiss.type = 'button';
       dismiss.setAttribute('aria-label', 'Dismiss');
       dismiss.innerHTML = ICONS.close;
@@ -768,12 +1115,14 @@ export function mountMfChat(root, opts) {
     }, 6000);
   }
 
-  const isOpen = () => root.classList.contains('mfc-open');
+  function isOpen() {
+    return root.classList.contains('mfc-open');
+  }
   function open(focus = true) {
     hideTeaser();
     root.classList.add('mfc-open');
     launcher.setAttribute('aria-expanded', 'true');
-    // The label text is hidden while open (the launcher becomes a close button).
+    // While the chat is open, the orb closes it.
     launcher.setAttribute('aria-label', 'Close chat');
     if (o.mode === 'floating') leftOpen.set('1');
     if (focus && finePointer) setTimeout(() => input.focus(), 50);
@@ -782,7 +1131,7 @@ export function mountMfChat(root, opts) {
     leftOpen.set(null);
     root.classList.remove('mfc-open');
     launcher.setAttribute('aria-expanded', 'false');
-    launcher.removeAttribute('aria-label');
+    launcher.setAttribute('aria-label', launcherLabel());
     launcher.focus();
   }
 
@@ -822,9 +1171,8 @@ export function mountMfChat(root, opts) {
   // Greet once the assistant's name is known and any earlier chat has loaded (or after a short wait).
   Promise.race([Promise.all([settings, loadHistory()]), new Promise((r) => setTimeout(r, 1500))]).then(() => {
     syncTitle();
-    if (root.classList.contains('mfc-has-messages')) return;
-    renderWelcome();
-    log.append(welcome);
+    if (root.classList.contains('mfc-has-messages') || log.childElementCount) return;
+    greet();
   });
 
   return {

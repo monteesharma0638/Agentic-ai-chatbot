@@ -5,24 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MF Agent Playground</title>
     <style>
+      /* The app's colours: dark by default, light with ?theme=light (the widget follows body.light-theme). */
       :root {
-        color-scheme: light dark;
-        --bg: #f3f5f4;
-        --card: #ffffff;
-        --border: #e3e8e6;
-        --text: #16211d;
-        --muted: #5f6b67;
-        --accent: #0b7a5a;
+        color-scheme: dark;
+        --bg: #000000;
+        --card: #121212;
+        --border: rgba(255, 255, 255, 0.1);
+        --text: #ffffff;
+        --muted: #a7b3c5;
+        --accent: #3007ff;
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #0c110f;
-          --card: #121816;
-          --border: #2a3531;
-          --text: #e7eeeb;
-          --muted: #9aa8a3;
-          --accent: #34c197;
-        }
+      body.light-theme {
+        color-scheme: light;
+        --bg: #f4f6f8;
+        --card: #ffffff;
+        --border: rgba(0, 0, 0, 0.08);
+        --text: #111827;
+        --muted: #4b5563;
+        --accent: #7943f8;
       }
       * { box-sizing: border-box; }
       body {
@@ -111,6 +111,7 @@
     <script src="/embed.js" data-manual></script>
     <script type="module">
       const params = new URLSearchParams(location.search);
+      document.body.classList.toggle('light-theme', params.get('theme') === 'light');
       document.getElementById('settings').hidden = params.get('settings') !== '1';
       for (const key of ['uid', 'name', 'scheme']) {
         if (params.has(key)) document.getElementById(key).value = params.get(key);
@@ -125,9 +126,11 @@
       }
       const scheme = Number(document.getElementById('scheme').value);
 
+      // ?floating=1 shows the orb at the bottom centre instead of the chat filling the page.
+      const floating = params.get('floating') === '1';
+      document.getElementById('chat').hidden = floating;
       window.MfChat.init({
-        mode: 'inline',
-        target: '#chat',
+        ...(floating ? { mode: 'floating' } : { mode: 'inline', target: '#chat' }),
         token,
         ...(scheme && { context: { page: 'fund-detail', scheme_code: scheme } }),
       });

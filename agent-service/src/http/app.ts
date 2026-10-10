@@ -127,6 +127,7 @@ export function createApp(deps: {
       message: parsed.data.message,
       conversationId: parsed.data.conversation_id,
       context: parsed.data.context,
+      profile: parsed.data.profile,
       user: req.chatUser!,
     };
   };
@@ -231,7 +232,7 @@ export function createApp(deps: {
   /** Public, non-personal settings the widget needs before the first message (greeting, suggested questions). */
   app.get('/api/widget/config', (_req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=300');
-    res.json({ assistant_name: config.ASSISTANT_NAME, portfolio: config.PORTFOLIO_SOURCE !== 'none' });
+    res.json({ assistant_name: config.ASSISTANT_NAME, app_name: config.APP_NAME, portfolio: config.PORTFOLIO_SOURCE !== 'none' });
   });
 
   const embedPath = resolve(PUBLIC_DIR, 'embed.js');

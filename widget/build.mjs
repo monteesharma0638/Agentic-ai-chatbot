@@ -1,4 +1,4 @@
-// Bundles the widget (with marked, DOMPurify, Chart.js and CSS) into one
+// Bundles the widget (with marked, DOMPurify, Chart.js, CSS and the assistant's picture) into one
 // self-contained script served by agent-service at /embed.js.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
@@ -22,7 +22,7 @@ const options = {
   minify: true,
   format: 'iife',
   target: ['es2020'],
-  loader: { '.css': 'text' },
+  loader: { '.css': 'text', '.jpg': 'dataurl' },
   legalComments: 'none',
   banner: { js: '/* MF Chat widget | built ' + new Date().toISOString().slice(0, 10) + ' */' },
   outfile,

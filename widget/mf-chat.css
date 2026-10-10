@@ -1,37 +1,58 @@
-/* MF Chat widget (rendered inside a Shadow DOM by embed.js). Theme via the custom properties below or data-accent / data-theme.
+/* MF Chat widget (rendered inside a Shadow DOM by embed.js), styled after the Robo Rupee app: black glass cards
+ * with a blue-to-magenta edge, a spinning orb at the bottom centre that opens the chat, and Plus Jakarta Sans.
  *
- * Designed for everyday Indian investors on phones: large readable text, big tap targets, a chat that looks
- * like the messaging apps people already use, and one warm accent (the marigold assistant avatar).
+ * Dark by default. data-theme="light" switches to the light palette; data-theme="auto" follows the OS.
+ * embed.js sets --mfc-logo (the assistant's picture) and --mfc-offset-x (shift from the viewport centre).
  */
 .mfc-root {
-  --mfc-accent: #0b7a5a;
-  --mfc-accent-ink: #ffffff;
-  --mfc-marigold: #f2a31b;
-  --mfc-sprout: #0a4d3a;
-  --mfc-online: #1f9d63;
-  --mfc-chart-2: #9aa5a0;
-  /* Pie slices, in this order (checked for colour-blind separation between neighbours, incl. last↔first). */
-  --mfc-cat-1: #2a78d6;
-  --mfc-cat-2: #eb6834;
-  --mfc-cat-3: #1baf7a;
-  --mfc-cat-4: #eda100;
-  --mfc-cat-other: #6b7571;
-  --mfc-bg: #ffffff;
-  --mfc-surface: #eaf4ef;
-  --mfc-field: #f3f6f4;
-  --mfc-border: #dde7e2;
-  --mfc-text: #1d2b26;
-  --mfc-muted: #5e6c67;
-  --mfc-user-bg: #0b7a5a;
-  --mfc-user-ink: #ffffff;
-  --mfc-danger: #b42318;
-  --mfc-radius: 18px;
-  --mfc-font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans Devanagari', sans-serif;
-  --mfc-shadow: 0 18px 50px rgba(16, 36, 28, 0.18), 0 2px 8px rgba(16, 36, 28, 0.08);
+  --mfc-bg: #000000;
+  --mfc-bg-500: rgba(0, 0, 0, 0.5);
+  --mfc-field: #121212;
+  --mfc-ink: #ffffff;
+  --mfc-text: #a7b3c5;
+  --mfc-muted: #7d7896;
+  --mfc-soft: #d1d5db;
+  --mfc-heading: #ffffff;
+  --mfc-online: #00d26a;
+  --mfc-danger: #ff4d4d;
+  --mfc-accent: #7c5cff;
+  --mfc-white-100: rgba(255, 255, 255, 0.05);
+  --mfc-white-200: rgba(255, 255, 255, 0.1);
+  --mfc-white-400: rgba(255, 255, 255, 0.24);
+  --mfc-border-strong: rgba(150, 130, 255, 0.55);
+  --mfc-bot-edge: rgba(47, 10, 255, 0.8);
+  --mfc-placeholder: rgba(255, 255, 255, 0.24);
+  /* The card: black with a blue glow in the top-left corner and a violet one in the bottom-right. */
+  --mfc-panel-bg:
+    radial-gradient(150px 125px at 0 0, rgba(35, 5, 207, 0.42), rgba(33, 8, 180, 0.2) 45%, transparent 100%),
+    radial-gradient(170px 170px at 100% 100%, rgba(70, 5, 115, 0.45), rgba(62, 6, 160, 0.45) 30%, rgba(59, 8, 184, 0.2) 60%, transparent 100%),
+    #000000;
+  --mfc-panel-shadow: none;
+  --mfc-edge: conic-gradient(from 0deg, rgba(0, 4, 251, 0.45) 0deg, rgba(0, 4, 251, 0.45) 50deg, rgba(189, 73, 209, 0.25) 128deg, rgba(189, 73, 209, 0.25) 252deg, rgba(0, 4, 251, 0.45) 320deg, rgba(0, 4, 251, 0.45) 1turn);
+  --mfc-ring: conic-gradient(from 0deg, rgba(24, 66, 252, 0.7) 0deg, rgba(24, 66, 252, 0.7) 128deg, rgba(80, 6, 49, 0.8) 190deg, rgba(80, 6, 49, 0.8) 320deg, rgba(24, 66, 252, 0.7) 1turn);
+  --mfc-orb-ring: conic-gradient(from 0deg, rgba(24, 66, 252, 0.7) 0deg, rgba(24, 66, 252, 0.7) 128deg, rgba(80, 6, 49, 0.6) 190deg, rgba(80, 6, 49, 0.6) 320deg, rgba(24, 66, 252, 0.7) 1turn);
+  --mfc-send: linear-gradient(313deg, #500631 20.55%, #3007ff 86.25%);
+  --mfc-send-ink: #ffffff;
+  --mfc-input-shadow: none;
+  --mfc-bubble-shadow: 0 -2px 4px 0 rgba(0, 0, 0, 0.2) inset, 0 2px 4px 0 rgba(255, 255, 255, 0.4) inset;
+  --mfc-glass-bg: rgba(22, 22, 25, 0.55);
+  --mfc-glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -12px 20px rgba(0, 0, 0, 0.38), inset 0 0 40px rgba(255, 255, 255, 0.02), 0 10px 30px rgba(0, 0, 0, 0.3), 0 18px 60px rgba(0, 0, 0, 0.45);
+  /* Charts: validated for colour-blind separation against the dark card. */
+  --mfc-line: #2fe08a;
+  --mfc-chart-2: #6b6880;
+  --mfc-grid: rgba(255, 255, 255, 0.08);
+  --mfc-bar: linear-gradient(90deg, #00bbff, #a100ff);
+  --mfc-cat-1: #4d7cff;
+  --mfc-cat-2: #1aa86a;
+  --mfc-cat-3: #a35cf5;
+  --mfc-cat-4: #c98500;
+  --mfc-cat-other: #6b6880;
+  --mfc-ease: cubic-bezier(0.22, 0.9, 0.32, 1);
+  --mfc-font: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans Devanagari', sans-serif;
   font-family: var(--mfc-font);
   color: var(--mfc-text);
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 16px;
+  line-height: 1.5;
   /* Inherited properties cross the Shadow DOM boundary; reset what host pages commonly set. */
   font-style: normal;
   font-weight: 400;
@@ -49,47 +70,71 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-@media (prefers-color-scheme: dark) {
-  .mfc-root:not([data-theme='light']) {
-    --mfc-accent: #3cc39a;
-    --mfc-accent-ink: #04241a;
-    --mfc-online: #3cc39a;
-    --mfc-chart-2: #7d8a85;
-    --mfc-cat-1: #3987e5;
-    --mfc-cat-2: #d95926;
-    --mfc-cat-3: #199e70;
-    --mfc-cat-4: #c98500;
-    --mfc-cat-other: #6f7a75;
-    --mfc-bg: #131a17;
-    --mfc-surface: #1c2a24;
-    --mfc-field: #1a221f;
-    --mfc-border: #2b3833;
-    --mfc-text: #e6eeea;
-    --mfc-muted: #9fb0a9;
-    --mfc-user-bg: #1f6b53;
-    --mfc-user-ink: #f2fbf7;
-    --mfc-danger: #ff8a80;
-  }
+.mfc-root[data-theme='light'] {
+  --mfc-bg: #f8fafc;
+  --mfc-bg-500: rgba(248, 250, 252, 0.6);
+  --mfc-field: #f8f8f8;
+  --mfc-ink: #111827;
+  --mfc-text: #374151;
+  --mfc-muted: #6b7280;
+  --mfc-soft: #4b5563;
+  --mfc-heading: #7943f8;
+  --mfc-online: #16a34a;
+  --mfc-danger: #dc2626;
+  --mfc-accent: #7943f8;
+  --mfc-white-100: rgba(0, 0, 0, 0.03);
+  --mfc-white-200: rgba(0, 0, 0, 0.06);
+  --mfc-white-400: rgba(0, 0, 0, 0.12);
+  --mfc-border-strong: rgba(100, 116, 139, 0.55);
+  --mfc-placeholder: #111827;
+  --mfc-panel-bg: linear-gradient(180deg, #e2e3ff 0%, #f2f4f8 100%);
+  --mfc-panel-shadow: 0 3px 10px 0 rgba(0, 0, 0, 0.2);
+  --mfc-send-ink: #f8fafc;
+  --mfc-input-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4) inset;
+  --mfc-glass-bg: rgba(0, 0, 0, 0.03);
+  --mfc-glass-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.1), inset 0 -12px 20px rgba(0, 0, 0, 0.05), inset 0 0 40px rgba(255, 255, 255, 0.02), 0 10px 30px rgba(0, 0, 0, 0.1), 0 18px 60px rgba(0, 0, 0, 0.15);
+  --mfc-line: #16a34a;
+  --mfc-chart-2: #9a98ac;
+  --mfc-grid: rgba(0, 0, 0, 0.08);
+  --mfc-cat-1: #2f5ef0;
+  --mfc-cat-2: #13925c;
+  --mfc-cat-3: #8d47e0;
+  --mfc-cat-4: #b86f00;
+  --mfc-cat-other: #8a8aa0;
 }
-.mfc-root[data-theme='dark'] {
-  --mfc-accent: #3cc39a;
-  --mfc-accent-ink: #04241a;
-  --mfc-online: #3cc39a;
-  --mfc-chart-2: #7d8a85;
-  --mfc-cat-1: #3987e5;
-  --mfc-cat-2: #d95926;
-  --mfc-cat-3: #199e70;
-  --mfc-cat-4: #c98500;
-  --mfc-cat-other: #6f7a75;
-  --mfc-bg: #131a17;
-  --mfc-surface: #1c2a24;
-  --mfc-field: #1a221f;
-  --mfc-border: #2b3833;
-  --mfc-text: #e6eeea;
-  --mfc-muted: #9fb0a9;
-  --mfc-user-bg: #1f6b53;
-  --mfc-user-ink: #f2fbf7;
-  --mfc-danger: #ff8a80;
+@media (prefers-color-scheme: light) {
+  .mfc-root[data-theme='auto'] {
+    --mfc-bg: #f8fafc;
+    --mfc-bg-500: rgba(248, 250, 252, 0.6);
+    --mfc-field: #f8f8f8;
+    --mfc-ink: #111827;
+    --mfc-text: #374151;
+    --mfc-muted: #6b7280;
+    --mfc-soft: #4b5563;
+    --mfc-heading: #7943f8;
+    --mfc-online: #16a34a;
+    --mfc-danger: #dc2626;
+    --mfc-accent: #7943f8;
+    --mfc-white-100: rgba(0, 0, 0, 0.03);
+    --mfc-white-200: rgba(0, 0, 0, 0.06);
+    --mfc-white-400: rgba(0, 0, 0, 0.12);
+    --mfc-border-strong: rgba(100, 116, 139, 0.55);
+    --mfc-placeholder: #111827;
+    --mfc-panel-bg: linear-gradient(180deg, #e2e3ff 0%, #f2f4f8 100%);
+    --mfc-panel-shadow: 0 3px 10px 0 rgba(0, 0, 0, 0.2);
+    --mfc-send-ink: #f8fafc;
+    --mfc-input-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4) inset;
+    --mfc-glass-bg: rgba(0, 0, 0, 0.03);
+    --mfc-glass-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.1), inset 0 -12px 20px rgba(0, 0, 0, 0.05), inset 0 0 40px rgba(255, 255, 255, 0.02), 0 10px 30px rgba(0, 0, 0, 0.1), 0 18px 60px rgba(0, 0, 0, 0.15);
+    --mfc-line: #16a34a;
+    --mfc-chart-2: #9a98ac;
+    --mfc-grid: rgba(0, 0, 0, 0.08);
+    --mfc-cat-1: #2f5ef0;
+    --mfc-cat-2: #13925c;
+    --mfc-cat-3: #8d47e0;
+    --mfc-cat-4: #b86f00;
+    --mfc-cat-other: #8a8aa0;
+  }
 }
 
 .mfc-root *,
@@ -100,44 +145,116 @@
 /* :where() keeps these at zero specificity so each button's own class sets its size. */
 :where(.mfc-root) button {
   font: inherit;
+  color: inherit;
   cursor: pointer;
 }
 :where(.mfc-root) button:disabled {
   cursor: default;
 }
 
-/* ---------- assistant avatar: the one warm accent ---------- */
-.mfc-avatar {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--mfc-marigold);
-  color: var(--mfc-sprout);
-  display: grid;
-  place-items: center;
-}
-.mfc-avatar svg {
-  width: 20px;
-  height: 20px;
-}
-.mfc-avatar-lg {
-  width: 40px;
-  height: 40px;
-}
-.mfc-avatar-lg svg {
-  width: 26px;
-  height: 26px;
+@keyframes mfc-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(1turn);
+  }
 }
 
-/* ---------- layout ---------- */
+/* ---------- the orb: opens the chat from the bottom centre ---------- */
+.mfc-launcher {
+  position: fixed;
+  left: calc(50% + var(--mfc-offset-x, 0px));
+  bottom: 10px;
+  transform: translateX(-50%);
+  width: 76px;
+  height: 76px;
+  padding: 2px;
+  border: 0;
+  border-radius: 999px;
+  clip-path: inset(0 round 999px);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 1px 20px rgba(255, 255, 255, 0.3)) drop-shadow(0 4px 4px rgba(0, 0, 0, 0.25));
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+  z-index: 2147483000;
+}
+/* The spinning edge: a square larger than the orb's diagonal, so the ring never shows a corner. */
+.mfc-launcher::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 150%;
+  aspect-ratio: 1;
+  background: var(--mfc-orb-ring);
+  animation: mfc-spin 5s linear infinite;
+  will-change: transform;
+}
+.mfc-orb-face {
+  position: relative;
+  z-index: 1;
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  background: var(--mfc-logo) center / cover no-repeat, var(--mfc-bg-500);
+}
+.mfc-tooltip {
+  position: fixed;
+  left: calc(50% + var(--mfc-offset-x, 0px));
+  bottom: 94px;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #000000;
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s linear;
+  z-index: 2147483000;
+}
+.mfc-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #000000;
+}
+.mfc-launcher:hover + .mfc-tooltip,
+.mfc-launcher:focus-visible + .mfc-tooltip {
+  opacity: 1;
+}
+.mfc-open .mfc-tooltip {
+  display: none;
+}
+
+/* ---------- the card ---------- */
 .mfc-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--mfc-bg);
-  border: 1px solid var(--mfc-border);
-  border-radius: var(--mfc-radius);
+  padding: 2px;
+  border-radius: 32px;
+  background: var(--mfc-edge);
   overflow: hidden;
+}
+.mfc-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 30px;
+  overflow: hidden;
+  background: var(--mfc-panel-bg);
+  box-shadow: var(--mfc-panel-shadow);
+  container-type: inline-size;
 }
 .mfc-inline {
   height: 100%;
@@ -146,147 +263,91 @@
   height: 100%;
   min-height: 480px;
 }
+.mfc-inline .mfc-back {
+  display: none;
+}
+
+/* Floating: the card rises from the orb, centred, with a notch in its bottom edge that cradles the orb. */
 .mfc-floating .mfc-panel {
   position: fixed;
-  right: 20px;
-  bottom: 88px;
-  width: min(420px, calc(100vw - 32px));
-  height: min(660px, calc(100vh - 120px));
-  box-shadow: var(--mfc-shadow);
+  left: calc(50% + var(--mfc-offset-x, 0px));
+  bottom: 63px;
+  width: min(820px, calc(100vw - 2 * max(var(--mfc-offset-x, 0px), -1 * var(--mfc-offset-x, 0px)) - 48px));
+  height: min(720px, calc(100vh - 87px));
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6), 0 18px 40px -20px rgba(90, 60, 255, 0.45);
   z-index: 2147483000;
   opacity: 0;
-  transform: translateY(12px) scale(0.98);
-  transform-origin: bottom right;
+  transform: translate(-50%, 16px) scale(0.98);
+  transform-origin: 50% 100%;
   pointer-events: none;
   visibility: hidden;
   transition:
-    opacity 0.18s ease,
-    transform 0.18s ease,
-    visibility 0s linear 0.18s;
+    opacity 0.25s var(--mfc-ease),
+    transform 0.25s var(--mfc-ease),
+    visibility 0s linear 0.25s;
 }
 .mfc-floating.mfc-open .mfc-panel {
   opacity: 1;
-  transform: none;
+  transform: translate(-50%, 0);
   pointer-events: auto;
   visibility: visible;
   transition:
-    opacity 0.18s ease,
-    transform 0.18s ease;
+    opacity 0.25s var(--mfc-ease),
+    transform 0.25s var(--mfc-ease);
 }
-.mfc-inline .mfc-close {
-  display: none;
-}
-
-/* Launcher: says what it does in words, not just an icon. Becomes a close button while the chat is open. */
-.mfc-launcher {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  height: 56px;
-  padding: 0 22px 0 10px;
-  border: 0;
+.mfc-floating .mfc-panel::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -60px;
+  width: 90px;
+  height: 90px;
   border-radius: 999px;
-  background: var(--mfc-accent);
-  color: var(--mfc-accent-ink);
-  box-shadow: var(--mfc-shadow);
-  z-index: 2147483000;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1;
+  transform: translateX(-50%);
+  background: var(--mfc-bg);
+  border: 2px solid rgba(189, 73, 209, 0.25);
+  z-index: 1;
+  pointer-events: none;
 }
-.mfc-launcher .mfc-avatar {
-  width: 38px;
-  height: 38px;
-}
-.mfc-launcher .mfc-avatar svg {
-  width: 24px;
-  height: 24px;
-}
-.mfc-launcher-close {
-  display: none;
-}
-.mfc-launcher-close svg {
-  width: 24px;
-  height: 24px;
-}
-.mfc-open .mfc-launcher {
-  width: 56px;
-  padding: 0;
-  justify-content: center;
-}
-.mfc-open .mfc-launcher .mfc-avatar,
-.mfc-open .mfc-launcher-text {
-  display: none;
-}
-.mfc-open .mfc-launcher-close {
-  display: grid;
+.mfc-floating .mfc-footer {
+  padding-bottom: 38px;
 }
 
+/* Phones: a full-screen chat, like the app's own chat page. The orb would cover the send button. */
 @media (max-width: 520px) {
   .mfc-floating .mfc-panel {
     inset: 0;
-    width: 100%;
-    height: 100%;
-    border: 0;
+    width: auto;
+    height: auto;
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+    transform: translateY(16px);
+  }
+  .mfc-floating.mfc-open .mfc-panel {
+    transform: none;
+  }
+  .mfc-floating .mfc-card {
     border-radius: 0;
   }
-  /* Full-screen on phones: the header has its own close button, and the launcher would cover the send button. */
+  .mfc-floating .mfc-panel::after {
+    display: none;
+  }
+  .mfc-floating .mfc-footer {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
   .mfc-open .mfc-launcher {
     display: none;
   }
   .mfc-launcher {
-    right: 16px;
-    bottom: 16px;
+    width: 66px;
+    height: 66px;
   }
-}
-
-/* One-time hello above the launcher */
-.mfc-teaser {
-  position: fixed;
-  right: 20px;
-  bottom: 88px;
-  width: min(300px, calc(100vw - 40px));
-  display: flex;
-  align-items: flex-start;
-  background: var(--mfc-bg);
-  color: var(--mfc-text);
-  border: 1px solid var(--mfc-border);
-  border-radius: 18px 18px 6px 18px;
-  box-shadow: var(--mfc-shadow);
-  padding: 12px 6px 12px 12px;
-  z-index: 2147483000;
-  animation: mfc-teaser-in 0.3s ease-out;
-}
-@keyframes mfc-teaser-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
+  .mfc-orb-face {
+    width: 62px;
+    height: 62px;
   }
-}
-.mfc-teaser-body {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  flex: 1;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-  font-size: 14.5px;
-  line-height: 1.45;
-}
-.mfc-teaser .mfc-teaser-close {
-  width: 30px;
-  height: 30px;
-  margin-top: -4px;
-}
-@media (max-width: 520px) {
-  .mfc-teaser {
-    right: 16px;
+  .mfc-tooltip {
     bottom: 84px;
   }
 }
@@ -295,9 +356,34 @@
 .mfc-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 10px 12px 14px;
-  border-bottom: 1px solid var(--mfc-border);
+  gap: 12px;
+  padding: 14px 20px;
+  background: var(--mfc-white-100);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--mfc-white-200);
+}
+.mfc-inline .mfc-header {
+  padding-left: 24px;
+}
+.mfc-back {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin-left: -8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mfc-ink);
+  display: grid;
+  place-items: center;
+}
+.mfc-back:hover {
+  background: var(--mfc-white-100);
+}
+.mfc-back svg {
+  width: 24px;
+  height: 24px;
 }
 .mfc-heading {
   display: flex;
@@ -306,9 +392,10 @@
   min-width: 0;
 }
 .mfc-title {
-  font-size: 16px;
-  font-weight: 650;
-  line-height: 1.3;
+  color: var(--mfc-ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -317,7 +404,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--mfc-muted);
+  color: var(--mfc-text);
   font-size: 13px;
 }
 .mfc-online {
@@ -327,48 +414,119 @@
   border-radius: 50%;
   background: var(--mfc-online);
 }
-.mfc-text-btn {
-  flex: none;
+/* Two classes, so these win over .mfc-glass's display. */
+.mfc-header .mfc-new {
   display: none;
-  align-items: center;
-  gap: 4px;
-  height: 36px;
-  padding: 0 12px 0 8px;
-  border: 1px solid var(--mfc-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--mfc-text);
-  font-size: 13.5px;
-  font-weight: 500;
 }
-.mfc-has-messages .mfc-text-btn {
+.mfc-has-messages .mfc-header .mfc-new {
   display: inline-flex;
 }
-.mfc-text-btn:hover {
-  background: var(--mfc-field);
+
+/* ---------- glass buttons (suggestions, New chat, Try again, the first choice) ---------- */
+@keyframes mfc-glass-float {
+  50% {
+    transform: translateY(-2px);
+  }
 }
-.mfc-text-btn svg {
+.mfc-glass {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  padding: 14px 32px;
+  border: 0;
+  border-radius: 32px;
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--mfc-ink);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.2px;
+  text-align: left;
+  background: var(--mfc-glass-bg);
+  -webkit-backdrop-filter: blur(20px) saturate(180%) brightness(1.08);
+  backdrop-filter: blur(20px) saturate(180%) brightness(1.08);
+  box-shadow: var(--mfc-glass-shadow);
+  outline: 1px solid rgba(255, 255, 255, 0.4);
+  outline-offset: -1px;
+  animation: mfc-glass-float 5s ease-in-out infinite;
+  transition: all 1s cubic-bezier(0.19, 1, 0.22, 1);
+}
+.mfc-glass:hover {
+  outline-color: rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -12px 18px rgba(0, 0, 0, 0.3), 0 0 25px rgba(90, 140, 255, 0.18), 0 0 45px rgba(150, 90, 255, 0.15), 0 25px 80px rgba(0, 0, 0, 0.45);
+}
+.mfc-glass:active {
+  transform: scale(0.98);
+}
+.mfc-glass:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.mfc-glass-sm {
+  padding: 12px 22px;
+  font-size: 14px;
+}
+.mfc-glass-xs {
+  padding: 8px 16px;
+  font-size: 14px;
+  gap: 6px;
+}
+.mfc-glass-border {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 2px;
+  border-radius: inherit;
+  background: linear-gradient(160deg, rgba(0, 4, 251, 0.45), rgba(189, 73, 209, 0.1));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+.mfc-glass-highlight {
+  position: absolute;
+  left: 15px;
+  bottom: -4px;
+  z-index: 3;
+  width: 110%;
+  height: 15%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.3), transparent);
+  filter: blur(10px);
+  opacity: 0.9;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+.mfc-glass-shine {
+  position: absolute;
+  top: -120%;
+  left: -45%;
+  z-index: 6;
+  width: 40%;
+  height: 320%;
+  transform: rotate(22deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06), transparent);
+  filter: blur(10px);
+  transition: left 1.2s ease;
+  pointer-events: none;
+}
+.mfc-glass:hover .mfc-glass-shine {
+  left: 145%;
+}
+.mfc-glass-content {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mfc-glass svg {
   width: 16px;
   height: 16px;
-}
-.mfc-icon-btn {
   flex: none;
-  width: 40px;
-  height: 40px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--mfc-muted);
-  display: grid;
-  place-items: center;
-}
-.mfc-icon-btn:hover {
-  background: var(--mfc-field);
-  color: var(--mfc-text);
-}
-.mfc-icon-btn svg {
-  width: 20px;
-  height: 20px;
 }
 
 /* ---------- messages ---------- */
@@ -376,22 +534,23 @@
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 18px 14px;
+  padding: 24px 24px 8px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 92, 255, 0.35) transparent;
 }
 .mfc-msg {
   display: flex;
-  gap: 8px;
+  gap: 16px;
 }
 .mfc-user {
   align-self: flex-end;
-  max-width: 85%;
+  max-width: 80%;
 }
 .mfc-assistant {
   align-self: stretch;
-  padding-right: 4%;
 }
 .mfc-body {
   flex: 1;
@@ -400,88 +559,114 @@
   flex-direction: column;
   align-items: flex-start;
 }
-.mfc-bubble {
-  max-width: 100%;
-  padding: 10px 14px;
-  border-radius: var(--mfc-radius);
-  overflow-wrap: anywhere;
+.mfc-avatar {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 1px solid var(--mfc-border-strong);
+  background: var(--mfc-logo) center / cover no-repeat, radial-gradient(circle at 35% 30%, #2a1f57, #06050f 70%);
 }
-.mfc-user .mfc-bubble {
-  background: var(--mfc-user-bg);
-  color: var(--mfc-user-ink);
-  border-top-right-radius: 6px;
-  white-space: pre-wrap;
+.mfc-bubble {
+  max-width: 640px;
+  overflow-wrap: anywhere;
+  background: var(--mfc-bg);
+  box-shadow: var(--mfc-bubble-shadow);
 }
 .mfc-assistant .mfc-bubble {
-  background: var(--mfc-surface);
-  border-top-left-radius: 6px;
+  border: 1.5px solid var(--mfc-bot-edge);
+  border-radius: 4px 18px 18px 18px;
+  padding: 1.2rem 1.4rem;
 }
-.mfc-assistant .mfc-bubble:empty {
+.mfc-assistant .mfc-bubble:has(> .mfc-md:empty) {
+  display: none;
+}
+.mfc-user .mfc-bubble {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 32px 32px 0 32px;
+  padding: 0.85rem 1.2rem;
+}
+.mfc-user .mfc-md {
+  white-space: pre-wrap;
+}
+.mfc-time {
+  margin-top: 8px;
+  color: var(--mfc-muted);
+  font-size: 0.7rem;
+  text-align: right;
+}
+.mfc-user .mfc-time {
+  margin-top: 4px;
+}
+.mfc-time:empty {
   display: none;
 }
 .mfc-error .mfc-bubble {
-  border: 1px solid color-mix(in srgb, var(--mfc-danger) 30%, transparent);
-  background: color-mix(in srgb, var(--mfc-danger) 7%, var(--mfc-bg));
+  border-color: color-mix(in srgb, var(--mfc-danger) 70%, transparent);
 }
 
 /* markdown */
-.mfc-bubble > :first-child {
+.mfc-md > :first-child {
   margin-top: 0;
 }
-.mfc-bubble > :last-child {
+.mfc-md > :last-child {
   margin-bottom: 0;
 }
-.mfc-bubble p,
-.mfc-bubble ul,
-.mfc-bubble ol {
-  margin: 0 0 10px;
+.mfc-md p,
+.mfc-md ul,
+.mfc-md ol {
+  margin: 0 0 12px;
 }
-.mfc-bubble ul,
-.mfc-bubble ol {
+.mfc-md ul,
+.mfc-md ol {
   padding-left: 20px;
 }
-.mfc-bubble li + li {
+.mfc-md li + li {
   margin-top: 4px;
 }
-.mfc-bubble h1,
-.mfc-bubble h2,
-.mfc-bubble h3 {
-  font-size: 15px;
-  margin: 12px 0 6px;
+.mfc-md h1,
+.mfc-md h2,
+.mfc-md h3 {
+  color: var(--mfc-heading);
+  font-size: 16px;
+  font-weight: 600;
+  margin: 14px 0 6px;
 }
-.mfc-bubble strong {
-  font-weight: 650;
+.mfc-md strong {
+  color: var(--mfc-ink);
+  font-weight: 600;
 }
-.mfc-bubble a {
-  color: var(--mfc-accent);
-}
-.mfc-bubble code {
+.mfc-md code {
   font-size: 13px;
-  background: var(--mfc-bg);
+  background: var(--mfc-white-100);
   padding: 1px 4px;
   border-radius: 4px;
 }
-.mfc-bubble table {
+.mfc-md table {
   display: block;
   overflow-x: auto;
   border-collapse: collapse;
-  margin: 8px 0 10px;
-  font-size: 13.5px;
+  margin: 8px 0 12px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
-.mfc-bubble th,
-.mfc-bubble td {
-  border: 1px solid var(--mfc-border);
-  padding: 6px 9px;
+.mfc-md th,
+.mfc-md td {
+  border-bottom: 1px solid var(--mfc-white-200);
+  padding: 8px 10px;
   text-align: left;
   white-space: nowrap;
 }
-.mfc-bubble th {
-  background: var(--mfc-bg);
+.mfc-md th {
+  background: var(--mfc-white-400);
+  color: var(--mfc-ink);
   font-weight: 600;
 }
+.mfc-md tr:nth-child(even) td {
+  background: var(--mfc-white-100);
+}
 /* The closing risk line: present, but quieter than the answer. */
-.mfc-bubble .mfc-note {
+.mfc-md .mfc-note {
   margin-top: 12px;
   font-size: 12.5px;
   line-height: 1.45;
@@ -491,41 +676,108 @@
   font-style: normal;
 }
 
-/* ---------- welcome ---------- */
+/* ---------- welcome, first questions ---------- */
 .mfc-welcome {
   animation: mfc-rise 0.35s ease-out both;
 }
-.mfc-greeting {
-  font-size: 17px;
-  font-weight: 650;
+.mfc-md .mfc-greeting {
+  color: var(--mfc-heading);
+  font-size: 18px;
+  font-weight: 500;
 }
-.mfc-bubble .mfc-hint {
+.mfc-md .mfc-hint {
   color: var(--mfc-muted);
   font-size: 14px;
+}
+.mfc-link {
+  margin-top: 4px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--mfc-soft);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  transition: color 0.35s;
+}
+.mfc-link:hover {
+  color: var(--mfc-ink);
 }
 .mfc-suggestions {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-top: 16px;
   width: 100%;
+  max-width: 640px;
   animation: mfc-rise 0.35s ease-out 0.15s both;
 }
-.mfc-chip {
-  max-width: 100%;
-  text-align: left;
-  font-size: 14.5px;
-  line-height: 1.4;
-  color: var(--mfc-accent);
-  background: var(--mfc-bg);
-  border: 1.5px solid color-mix(in srgb, var(--mfc-accent) 40%, transparent);
-  border-radius: 16px;
-  padding: 9px 14px;
+.mfc-choices {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;
 }
-.mfc-chip:hover {
-  background: color-mix(in srgb, var(--mfc-accent) 8%, var(--mfc-bg));
-  border-color: var(--mfc-accent);
+.mfc-or {
+  color: var(--mfc-text);
+  font-weight: 700;
+}
+.mfc-question .mfc-bubble {
+  width: 100%;
+  max-width: 520px;
+}
+.mfc-md .mfc-q-title {
+  margin-bottom: 16px;
+  color: var(--mfc-heading);
+  font-size: 1.15rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.mfc-option {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  margin-bottom: 0.6rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mfc-text);
+  font-size: 16px;
+  line-height: 1.4;
+  text-align: left;
+  transition: all 0.25s var(--mfc-ease);
+}
+.mfc-option:last-child {
+  margin-bottom: 0;
+}
+.mfc-option:hover:not(:disabled),
+.mfc-option[aria-checked='true'] {
+  background: var(--mfc-white-200);
+}
+.mfc-option[aria-checked='true'] {
+  color: var(--mfc-ink);
+}
+.mfc-dot {
+  position: relative;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--mfc-text);
+}
+.mfc-option[aria-checked='true'] .mfc-dot {
+  border-color: var(--mfc-ink);
+}
+.mfc-option[aria-checked='true'] .mfc-dot::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--mfc-ink);
 }
 @keyframes mfc-rise {
   from {
@@ -533,18 +785,21 @@
     transform: translateY(6px);
   }
 }
+.mfc-reveal {
+  animation: mfc-rise 0.35s var(--mfc-ease) both;
+}
 
 /* ---------- while the assistant works ---------- */
 .mfc-typing {
   display: inline-flex;
   gap: 5px;
-  padding: 7px 2px;
+  padding: 6px 2px;
 }
 .mfc-typing i {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--mfc-muted);
+  background: var(--mfc-text);
   opacity: 0.35;
   animation: mfc-bounce 1.2s ease-in-out infinite;
 }
@@ -570,47 +825,49 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin: 6px 0 0 4px;
+  margin: 8px 0 0 4px;
   font-size: 13.5px;
-  color: var(--mfc-muted);
+  color: var(--mfc-text);
 }
 .mfc-step {
   position: relative;
-  padding-left: 16px;
+  padding-left: 18px;
 }
 .mfc-step::before {
   content: '';
   position: absolute;
   left: 2px;
   top: 50%;
-  width: 8px;
-  height: 8px;
-  margin-top: -4px;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
   border-radius: 50%;
-  background: var(--mfc-accent);
+  background: var(--mfc-send);
+  box-shadow: 0 0 8px rgba(124, 92, 255, 0.6);
   animation: mfc-pulse 1s ease-in-out infinite;
 }
 @keyframes mfc-pulse {
   50% {
-    opacity: 0.25;
+    opacity: 0.3;
   }
 }
 .mfc-slow {
-  padding-left: 16px;
+  padding-left: 18px;
   font-size: 13px;
+  color: var(--mfc-muted);
 }
 
 /* ---------- after an answer ---------- */
 .mfc-actions {
   display: flex;
   gap: 2px;
-  margin: 4px 0 0 -4px;
+  margin: 6px 0 0 -4px;
 }
 .mfc-action {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 36px;
+  height: 34px;
   padding: 0 10px;
   border: 0;
   border-radius: 999px;
@@ -619,50 +876,42 @@
   font-size: 13px;
 }
 .mfc-action:hover {
-  background: var(--mfc-field);
-  color: var(--mfc-text);
+  background: var(--mfc-white-100);
+  color: var(--mfc-ink);
 }
 .mfc-action svg {
   width: 16px;
   height: 16px;
 }
 .mfc-retry {
-  margin-top: 8px;
-  height: 40px;
-  padding: 0 18px;
-  border: 1.5px solid var(--mfc-accent);
-  border-radius: 999px;
-  background: var(--mfc-bg);
-  color: var(--mfc-accent);
-  font-size: 14.5px;
-  font-weight: 600;
-}
-.mfc-retry:hover {
-  background: color-mix(in srgb, var(--mfc-accent) 8%, var(--mfc-bg));
+  margin-top: 12px;
 }
 
 /* charts */
 .mfc-chart {
   align-self: stretch;
-  margin: 8px 0 0;
-  padding: 12px 12px 8px;
-  border: 1px solid var(--mfc-border);
-  border-radius: 14px;
-  background: var(--mfc-bg);
+  max-width: 640px;
+  margin: 12px 0 0;
+  padding: 1.2rem;
+  border: 1px solid var(--mfc-white-100);
+  border-radius: 16px;
+  background: var(--mfc-white-100);
+  box-shadow: 0 0 5px 0 var(--mfc-white-200);
 }
 .mfc-chart figcaption {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 .mfc-chart-title {
+  color: var(--mfc-heading);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.35;
 }
 .mfc-chart-sub {
-  color: var(--mfc-muted);
+  color: var(--mfc-text);
   font-size: 13px;
   line-height: 1.4;
 }
@@ -671,7 +920,7 @@
   height: 200px;
 }
 
-/* bars: one hue for the answer, grey for reference points such as "Money put in" */
+/* bars: the app's progress-bar gradient for the answer, grey for reference points such as "Money put in" */
 .mfc-bars {
   display: flex;
   flex-direction: column;
@@ -694,14 +943,15 @@
 }
 .mfc-bar {
   flex: none;
-  height: 12px;
+  height: 10px;
   /* Leave room for the value at the bar's tip. */
   width: calc(var(--f) * (100% - 7.5em));
   min-width: 3px;
-  border-radius: 0 4px 4px 0;
-  background: var(--mfc-accent);
+  border-radius: 0 6px 6px 0;
+  background: var(--mfc-bar);
 }
 .mfc-bar-value {
+  color: var(--mfc-ink);
   font-size: 13.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -720,7 +970,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 14px 18px;
+  gap: 14px 22px;
   padding-bottom: 4px;
 }
 .mfc-donut-dial {
@@ -750,8 +1000,9 @@
   line-height: 1.25;
 }
 .mfc-donut-centre strong {
+  color: var(--mfc-ink);
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 600;
 }
 .mfc-donut-centre span {
   font-size: 12px;
@@ -795,78 +1046,237 @@
   color: var(--mfc-muted);
 }
 .mfc-legend-share {
+  color: var(--mfc-ink);
   font-size: 13.5px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- composer ---------- */
+/* ---------- composer: a pill with a slowly turning gradient edge ---------- */
+.mfc-footer {
+  padding: 12px 24px 16px;
+}
 .mfc-composer {
+  position: relative;
+  isolation: isolate;
+  padding: 3px;
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: 0 0 10px 3px rgba(255, 255, 255, 0.2);
+}
+.mfc-composer::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(100% + 80px);
+  aspect-ratio: 1;
+  background: var(--mfc-ring);
+  animation: mfc-spin 6s linear infinite;
+  will-change: transform;
+  z-index: 0;
+}
+.mfc-input-bar {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 10px 12px 8px;
-  border-top: 1px solid var(--mfc-border);
+  padding: 8px 16px;
+  border-radius: 34px;
+  background: var(--mfc-field);
+  box-shadow: var(--mfc-input-shadow);
 }
 .mfc-input {
   flex: 1;
-  min-height: 46px;
+  min-width: 0;
+  min-height: 52px;
   max-height: 140px;
+  margin: 0;
+  padding: 14px 4px;
   resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
   font: inherit;
   /* 16px stops iPhones zooming the page when the box is tapped. */
   font-size: 16px;
-  line-height: 1.4;
-  color: var(--mfc-text);
-  background: var(--mfc-field);
-  border: 1px solid var(--mfc-border);
-  border-radius: 23px;
-  padding: 11px 16px;
-  outline: none;
+  line-height: 1.5;
+  color: var(--mfc-ink);
 }
 .mfc-input::placeholder {
-  color: var(--mfc-muted);
-}
-.mfc-input:focus {
-  border-color: var(--mfc-accent);
+  color: var(--mfc-placeholder);
+  opacity: 1;
 }
 .mfc-send {
   flex: none;
-  width: 46px;
-  height: 46px;
+  width: 52px;
+  height: 52px;
   border: 0;
-  border-radius: 50%;
-  background: var(--mfc-accent);
-  color: var(--mfc-accent-ink);
-  display: grid;
-  place-items: center;
+  border-radius: 70px;
+  background: var(--mfc-send);
+  color: var(--mfc-send-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s var(--mfc-ease), opacity 0.25s;
+}
+.mfc-send:hover:not(:disabled) {
+  transform: scale(1.08) rotate(8deg);
 }
 .mfc-send:disabled {
-  background: var(--mfc-field);
-  color: var(--mfc-muted);
-  border: 1px solid var(--mfc-border);
+  opacity: 0.5;
 }
 .mfc-send svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
 }
 .mfc-disclaimer {
-  margin: 0;
-  padding: 0 16px max(10px, env(safe-area-inset-bottom));
+  margin: 10px 0 0;
+  padding: 0 8px;
   font-size: 11.5px;
   line-height: 1.45;
   color: var(--mfc-muted);
   text-align: center;
 }
 
-.mfc-root button:focus-visible,
-.mfc-input:focus-visible {
+/* ---------- one-time hello above the orb ---------- */
+.mfc-teaser {
+  position: fixed;
+  left: calc(50% + var(--mfc-offset-x, 0px));
+  bottom: 102px;
+  transform: translateX(-50%);
+  width: min(340px, calc(100vw - 32px));
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 8px 14px 14px;
+  border: 1.5px solid var(--mfc-bot-edge);
+  border-radius: 18px;
+  background: var(--mfc-bg);
+  color: var(--mfc-text);
+  box-shadow: var(--mfc-bubble-shadow), 0 18px 40px rgba(0, 0, 0, 0.45);
+  z-index: 2147483000;
+  animation: mfc-teaser-in 0.3s var(--mfc-ease);
+}
+.mfc-teaser::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  background: var(--mfc-bg);
+  border-right: 1.5px solid var(--mfc-bot-edge);
+  border-bottom: 1.5px solid var(--mfc-bot-edge);
+  transform: translateX(-50%) rotate(45deg);
+}
+@keyframes mfc-teaser-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+.mfc-teaser-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+.mfc-teaser .mfc-avatar {
+  width: 32px;
+  height: 32px;
+}
+.mfc-icon-btn {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--mfc-muted);
+  display: grid;
+  place-items: center;
+}
+.mfc-icon-btn:hover {
+  background: var(--mfc-white-100);
+  color: var(--mfc-ink);
+}
+.mfc-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+@media (max-width: 520px) {
+  .mfc-teaser {
+    bottom: 92px;
+  }
+}
+
+/* ---------- narrow cards (phones, small inline panels): the app's mobile sizes ---------- */
+@container (max-width: 640px) {
+  .mfc-log {
+    padding: 20px 16px 8px;
+  }
+  .mfc-header {
+    padding: 12px 16px;
+  }
+  .mfc-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .mfc-msg {
+    gap: 12px;
+  }
+  .mfc-avatar {
+    width: 32px;
+    height: 32px;
+  }
+  .mfc-md,
+  .mfc-option {
+    font-size: 14px;
+  }
+  .mfc-assistant .mfc-bubble {
+    padding: 1rem 1.1rem;
+  }
+  .mfc-choices {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .mfc-glass {
+    padding: 12px 24px;
+    font-size: 14px;
+  }
+  .mfc-glass-xs {
+    padding: 8px 14px;
+  }
+}
+
+.mfc-root button:focus-visible {
   outline: 2px solid var(--mfc-accent);
   outline-offset: 2px;
 }
+/* The input's focus ring goes around the whole pill. */
+.mfc-composer:has(.mfc-input:focus-visible) {
+  box-shadow: 0 0 10px 3px rgba(255, 255, 255, 0.2), 0 0 0 2px var(--mfc-accent);
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .mfc-root * {
+  .mfc-root *,
+  .mfc-root *::before,
+  .mfc-root *::after {
     animation: none !important;
     transition: none !important;
+  }
+  .mfc-launcher::before,
+  .mfc-composer::before {
+    transform: translate(-50%, -50%);
   }
 }

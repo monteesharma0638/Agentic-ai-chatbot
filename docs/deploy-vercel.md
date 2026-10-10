@@ -111,7 +111,7 @@ MF_CHAT_SECRET=<exactly the same as WIDGET_TOKEN_SECRET on Vercel>
 ```
 
 Then run `php artisan config:clear` (or `config:cache` in production). Open your Laravel site while logged in;
-the chat button appears in the bottom-right corner.
+the chat orb appears at the bottom centre.
 
 ## 7. Protect the API with a rate limit
 
