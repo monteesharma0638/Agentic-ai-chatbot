@@ -25,11 +25,12 @@ Put it inside `<head>` or just before `</body>` in the template every page uses.
 
 ### Inside the page instead of floating
 
-To show the chat as a card in the page (it scrolls with the page instead of staying fixed to the window),
-paste [`html-embed/chat-inline.html`](../html-embed/chat-inline.html) where the chat should appear, e.g. in
-place of the dashboard's "Ask AI" card. The floating tag above is also kept as
-[`html-embed/chat-floating.html`](../html-embed/chat-floating.html). Use one of them per page: if both are on
-a page, only one loads.
+[`html-embed/chat-inline.html`](../html-embed/chat-inline.html) is the dashboard's "Ask AI" card with the
+same HTML (input box included), made to work: answers stream into the card, with charts, and it scrolls with
+the page instead of staying fixed to the window. Paste it in place of that card. It uses the site's
+`css/style.css` for its look and talks to the chat server directly, without `embed.js`. The floating tag above
+is kept as [`html-embed/chat-floating.html`](../html-embed/chat-floating.html); both can be on the same page
+and continue the same conversation.
 
 ## 2. Allow the website on the server
 

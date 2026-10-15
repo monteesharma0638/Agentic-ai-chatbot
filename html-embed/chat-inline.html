@@ -1,31 +1,517 @@
-<!--
-  Robo Rupee chat: INLINE version.
-  The chat sits where you paste it and scrolls with the page (it is not fixed to the window).
-
-  How to use
-  1. Paste everything from START to END where the chat should appear.
-     In dashboard.html, replace the "Ask AI" card with it, i.e. this whole block:
-         <div class="gcard dashboard-ask-ai-box w-100 mb-4"> … </div>
-     (keep the <div class="col-md-6"> around it).
-  2. Change "height: 560px" if you want a taller or shorter chat. 480px is the smallest it draws.
-
-  Good to know
-  - One chat per page: use this file or chat-floating.html on a page, not both (only one of them loads).
-  - The page's address must be in ALLOWED_ORIGINS on the chat server, the same as for the floating version.
-  - It turns light or dark with the page's theme toggle (body.light-theme).
-  - The conversation carries over to the floating chat on your other pages, and back.
-  - Optional attributes for the <script> tag (see docs/embed-any-website.md):
-      data-token="…"            signed-in user (greets them by name, "my investments" questions)
-      data-onboarding="false"   skip the quick questions before the first chat
-      data-title="…"            name in the chat header (default: the assistant's name)
--->
-
 <!-- START: Robo Rupee chat (inline) -->
-<div id="rr-chat-inline" style="width: 100%; height: 560px; margin-bottom: 1.5rem;"></div>
-<script
-  src="https://mcp-server-ten-eta.vercel.app/embed.js"
-  data-mode="inline"
-  data-target="#rr-chat-inline"
-  defer
-></script>
+<div class="gcard dashboard-ask-ai-box w-100 mb-4">
+    <div class="gcard-inner p-4">
+      <div class="chat-container-box">
+          <h6 class="my-4">Hello Shankar🙏, what's on your mind?</h6>
+      </div>
+      
+      <div class="chat-bar-dashboard">
+        <div class="chat-input-bar d-flex align-items-center px-3 py-2">
+          <input type="text" class="form-control" placeholder="Ask SAMRIDHI...">
+        </div>
+      </div>
+    </div>
+</div>
+
+<style>
+  /* Messages inside the card. Colours come from the page's theme variables in style.css. */
+  .chat-container-box.rrc-active { justify-content: flex-start; align-items: stretch; }
+  .chat-container-box.rrc-active > h6 { text-align: center; }
+  .rrc-msg { display: flex; flex-direction: column; margin-bottom: 14px; font-size: .9rem; line-height: 1.5; color: var(--text); }
+  .rrc-user { align-items: flex-end; }
+  .rrc-bot { align-items: flex-start; }
+  .rrc-msg .bubble-user { max-width: 85%; padding: .6rem 1rem; color: var(--white); overflow-wrap: anywhere; }
+  .rrc-msg .bubble-bot { max-width: 100%; padding: .8rem 1rem; overflow-wrap: anywhere; }
+  .rrc-user .rrc-md { white-space: pre-wrap; }
+  .rrc-time { margin-top: 4px; font-size: .7rem; color: var(--text-mute); text-align: right; }
+  .rrc-time:empty { display: none; }
+  .rrc-md p, .rrc-md ul, .rrc-md ol { margin: 0 0 8px; }
+  .rrc-md > :last-child { margin-bottom: 0; }
+  .rrc-md ul, .rrc-md ol { padding-left: 18px; }
+  .rrc-md strong { color: var(--white); font-weight: 600; }
+  .rrc-md code { font-size: .8rem; background: var(--white-100); padding: 1px 4px; border-radius: 4px; }
+  .rrc-md .rrc-h { margin: 10px 0 4px; color: var(--white); font-weight: 600; }
+  .rrc-md .rrc-note { font-size: .78rem; color: var(--text-mute); }
+  .rrc-md .rrc-note em { font-style: normal; }
+  .rrc-md table { display: block; overflow-x: auto; border-collapse: collapse; margin: 6px 0 8px; font-size: .8rem; }
+  .rrc-md th, .rrc-md td { padding: 6px 8px; border-bottom: 1px solid var(--white-200); text-align: left; white-space: nowrap; }
+  .rrc-md th { background: var(--white-200); color: var(--white); font-weight: 600; }
+  .rrc-typing { display: inline-flex; gap: 4px; padding: 4px 0; }
+  .rrc-typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--text); opacity: .35; animation: rrc-bounce 1.2s ease-in-out infinite; }
+  .rrc-typing i:nth-child(2) { animation-delay: .15s; }
+  .rrc-typing i:nth-child(3) { animation-delay: .3s; }
+  @keyframes rrc-bounce { 30% { transform: translateY(-3px); opacity: .9; } }
+  .rrc-status { margin-top: 6px; font-size: .78rem; color: var(--text-mute); }
+  .rrc-error .bubble-bot { border-color: var(--danger); }
+  .rrc-retry { margin-top: 8px; padding: 0; border: 0; background: none; color: var(--white); font-size: .8rem; font-weight: 600; text-decoration: underline; cursor: pointer; }
+  .rrc-chart { width: 100%; margin: 0 0 8px; padding: .8rem; border: 1px solid var(--white-100); border-radius: 16px; background: var(--white-100); font-size: .78rem; }
+  .rrc-chart-title { color: var(--white); font-weight: 600; font-size: .85rem; }
+  .rrc-chart-sub { margin-bottom: 6px; color: var(--text-mute); }
+  .rrc-chart svg { display: block; width: 100%; }
+  .rrc-axis { display: flex; justify-content: space-between; margin-top: 2px; color: var(--text-mute); font-size: .7rem; }
+  .rrc-legend { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
+  .rrc-legend li { display: flex; align-items: center; gap: 6px; }
+  .rrc-legend b { margin-left: auto; color: var(--white); font-weight: 600; white-space: nowrap; }
+  .rrc-swatch { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+  .rrc-bars { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .rrc-bar-line { display: flex; align-items: center; gap: 6px; }
+  .rrc-bar { display: block; flex: none; height: 8px; min-width: 3px; border-radius: 0 6px 6px 0; background: linear-gradient(90deg, #00bbff, #a100ff); }
+  .rrc-bar-value { color: var(--white); font-weight: 600; white-space: nowrap; }
+  .rrc-muted .rrc-bar { background: var(--text-mute); }
+  .rrc-muted, .rrc-muted .rrc-bar-value { color: var(--text-mute); }
+  .rrc-donut { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .rrc-donut svg { flex: none; width: 110px; height: 110px; }
+  .rrc-donut .rrc-legend { flex: 1 1 140px; margin: 0; }
+</style>
+
+<script data-api="https://mcp-server-ten-eta.vercel.app">
+(function () {
+  var me = document.currentScript;
+  var API = (me.getAttribute('data-api') || 'https://mcp-server-ten-eta.vercel.app').replace(/\/$/, '');
+  var TOKEN = me.getAttribute('data-token') || '';
+
+  // The "Ask AI" card just above this script.
+  var card = me.previousElementSibling;
+  while (card && !card.classList.contains('dashboard-ask-ai-box')) card = card.previousElementSibling;
+  card = card || document.querySelector('.dashboard-ask-ai-box');
+  var box = card && card.querySelector('.chat-container-box');
+  var input = card && card.querySelector('.chat-input-bar input');
+  if (!box || !input) return;
+  input.maxLength = 2000;
+  input.setAttribute('enterkeyhint', 'send');
+  input.setAttribute('aria-label', 'Your question');
+  box.setAttribute('aria-live', 'polite');
+
+  var ERRORS = {
+    401: 'Your session has timed out. Refresh the page to keep chatting.',
+    403: 'The assistant is not available for your account.',
+    429: "That's a lot of questions at once. Wait a few seconds, then tap Try again.",
+    network: "Couldn't connect. Check your internet connection, then tap Try again.",
+    generic: "The answer didn't come through this time. Tap Try again."
+  };
+  // Errors that retrying the same message won't fix.
+  var FINAL = ['blocked', 'auth_required', 'message_too_long', 'invalid_request', 'origin_not_allowed'];
+  var PROFILE_KEYS = ['age', 'experience', 'goal', 'horizon', 'reaction', 'risk'];
+  var COLOURS = ['#4d7cff', '#1aa86a', '#a35cf5', '#c98500'];
+  var OTHER = '#6b6880';
+  var inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 });
+
+  // ---------- storage, shared with the floating chat so a conversation carries over ----------
+  function read(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function write(key, v) { try { v ? localStorage.setItem(key, v) : localStorage.removeItem(key); } catch (e) {} }
+  function randomId() {
+    var bytes = crypto.getRandomValues(new Uint8Array(18));
+    return btoa(String.fromCharCode.apply(null, bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function visitorId() {
+    var id = read('mf-chat:visitor');
+    if (!id) { id = randomId(); write('mf-chat:visitor', id); }
+    return id;
+  }
+  function userId() {
+    if (!TOKEN) return 'guest';
+    try {
+      var p = TOKEN.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+      var json = new TextDecoder().decode(Uint8Array.from(atob(p), function (c) { return c.charCodeAt(0); }));
+      return String(JSON.parse(json).uid || 'user');
+    } catch (e) { return 'user'; }
+  }
+  var uid = userId();
+  var convKey = 'mf-chat:conversation:' + uid;
+  var conversationId = read(convKey);
+  /** Answers to the floating chat's quick questions, if given there. */
+  function profile() {
+    try {
+      var saved = JSON.parse(read('mf-chat:profile:' + uid) || 'null'), out = {}, any = false;
+      PROFILE_KEYS.forEach(function (k) { if (saved && saved[k]) { out[k] = saved[k]; any = true; } });
+      return any ? out : null;
+    } catch (e) { return null; }
+  }
+  function headers(json) {
+    var h = { Accept: 'application/json, text/event-stream' };
+    if (json) h['Content-Type'] = 'application/json';
+    if (TOKEN) h.Authorization = 'Bearer ' + TOKEN; else h['X-Visitor-Id'] = visitorId();
+    return h;
+  }
+
+  // ---------- small helpers ----------
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+  function svg(tag, attrs) {
+    var n = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+  function clock(d) {
+    return (d || new Date()).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+  }
+  function monthYear(iso) {
+    return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  }
+  /** ₹84,862 / ₹2.38 lakh / ₹1.2 crore */
+  function rupees(v) {
+    var a = Math.abs(v);
+    if (a >= 1e7) return '₹' + +(v / 1e7).toFixed(2) + ' crore';
+    if (a >= 1e5) return '₹' + +(v / 1e5).toFixed(2) + ' lakh';
+    return '₹' + inr.format(v);
+  }
+  function toEnd() { box.scrollTop = box.scrollHeight; }
+  function nearBottom() { return box.scrollHeight - box.scrollTop - box.clientHeight < 60; }
+
+  // ---------- markdown: everything is escaped first, so only the tags added here can appear ----------
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function inline(s) {
+    return esc(s)
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // no links or images to other sites: keep the text
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/__(.+?)__/g, '<strong>$1</strong>')
+      .replace(/(^|[^*\w])\*(?!\s)(.+?)\*(?!\w)/g, '$1<em>$2</em>')
+      .replace(/(^|[^_\w])_(?!\s)(.+?)_(?!\w)/g, '$1<em>$2</em>');
+  }
+  function cells(row) { return row.replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return c.trim(); }); }
+  function markdown(src) {
+    var lines = String(src).replace(/\r\n/g, '\n').split('\n'), out = [], para = [], list = null;
+    function flushPara() { if (para.length) out.push('<p>' + para.map(inline).join('<br>') + '</p>'); para = []; }
+    function flushList() {
+      if (list) out.push('<' + list.tag + '>' + list.items.map(function (x) { return '<li>' + inline(x) + '</li>'; }).join('') + '</' + list.tag + '>');
+      list = null;
+    }
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i], t = raw.trim(), m;
+      if (!t) { flushPara(); flushList(); continue; }
+      var next = (lines[i + 1] || '').trim();
+      if (t.charAt(0) === '|' && /^\|?[\s:|-]+\|?$/.test(next) && next.indexOf('-') >= 0) {
+        flushPara(); flushList();
+        var head = cells(t), rows = [];
+        i++;
+        while (i + 1 < lines.length && lines[i + 1].trim().charAt(0) === '|') rows.push(cells(lines[++i].trim()));
+        out.push('<table><thead><tr>' + head.map(function (c) { return '<th>' + inline(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+          rows.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + inline(c) + '</td>'; }).join('') + '</tr>'; }).join('') +
+          '</tbody></table>');
+        continue;
+      }
+      if ((m = /^#{1,6}\s+(.*)$/.exec(t))) { flushPara(); flushList(); out.push('<p class="rrc-h">' + inline(m[1]) + '</p>'); continue; }
+      if (/^([-*_])\1{2,}$/.test(t)) { flushPara(); flushList(); continue; }
+      var ul = /^[-*+]\s+(.*)$/.exec(t), ol = /^\d+[.)]\s+(.*)$/.exec(t);
+      if (ul || ol) {
+        flushPara();
+        var tag = ul ? 'ul' : 'ol';
+        if (!list || list.tag !== tag) { flushList(); list = { tag: tag, items: [] }; }
+        list.items.push((ul || ol)[1]);
+        continue;
+      }
+      if (list && /^\s/.test(raw)) { list.items[list.items.length - 1] += ' ' + t; continue; }
+      flushList();
+      para.push(t);
+    }
+    flushPara(); flushList();
+    // A closing italic-only line (the market-risk note) is shown as a quiet note.
+    var last = out[out.length - 1];
+    if (last && /^<p><em>[\s\S]*<\/em><\/p>$/.test(last) && last.indexOf('<em>', 4) < 0) out[out.length - 1] = '<p class="rrc-note">' + last.slice(3);
+    return out.join('');
+  }
+
+  // ---------- messages ----------
+  function addMessage(role, text, at) {
+    box.classList.add('rrc-active');
+    var wrap = el('div', 'rrc-msg ' + (role === 'user' ? 'rrc-user' : 'rrc-bot'));
+    var bubble = el('div', role === 'user' ? 'bubble-user' : 'bubble-bot chat-bubble');
+    var md = el('div', 'rrc-md');
+    var time = el('div', 'rrc-time');
+    bubble.appendChild(md);
+    bubble.appendChild(time);
+    wrap.appendChild(bubble);
+    if (role === 'user') {
+      md.textContent = text;
+      stamp(time, at ? new Date(at) : new Date(), Boolean(at));
+    } else {
+      if (text) md.innerHTML = markdown(text);
+      if (at) time.textContent = clock(new Date(at));
+    }
+    box.appendChild(wrap);
+    toEnd();
+    return { wrap: wrap, bubble: bubble, md: md, time: time };
+  }
+  /** 09:41 AM ✓ while sending, ✓✓ once the assistant has the message. */
+  function stamp(time, at, delivered) { time.textContent = clock(at) + ' ' + (delivered ? '✓✓' : '✓'); }
+
+  function addError(message, retry) {
+    var row = addMessage('bot', '');
+    row.wrap.classList.add('rrc-error');
+    row.md.textContent = message;
+    row.time.textContent = clock();
+    if (retry) {
+      var btn = el('button', 'rrc-retry', 'Try again');
+      btn.type = 'button';
+      btn.addEventListener('click', function () { row.wrap.remove(); retry(); });
+      row.wrap.appendChild(btn);
+    }
+    toEnd();
+  }
+
+  // ---------- charts ----------
+  var chartCount = 0;
+  function addChart(row, chart) {
+    var fig = el('figure', 'rrc-chart');
+    fig.appendChild(el('div', 'rrc-chart-title', chart.title));
+    if (chart.subtitle) fig.appendChild(el('div', 'rrc-chart-sub', chart.subtitle));
+    if (chart.kind === 'bar') drawBars(fig, chart);
+    else if (chart.kind === 'donut') drawDonut(fig, chart);
+    else drawLine(fig, chart);
+    // Above the reply, so the reply streams in at the bottom of the small card where it can be read.
+    row.wrap.insertBefore(fig, row.bubble);
+    toEnd();
+  }
+  function legend(items) {
+    var ul = el('ul', 'rrc-legend');
+    items.forEach(function (it) {
+      var li = el('li');
+      var sw = el('i', 'rrc-swatch');
+      sw.style.background = it.colour;
+      li.appendChild(sw);
+      li.appendChild(el('span', '', it.label));
+      li.appendChild(el('b', '', it.value));
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+  /** Like the dashboard's portfolio chart: the last series in green with a fade under it, earlier ones grey. */
+  function drawLine(fig, chart) {
+    var series = chart.series || [];
+    if (!series.length || !series[0].points.length) return;
+    var W = 300, H = 120, P = 6, all = [];
+    series.forEach(function (s) { s.points.forEach(function (p) { all.push(p[1]); }); });
+    var min = Math.min.apply(null, all), span = Math.max.apply(null, all) - min || 1;
+    var id = 'rrc-fade-' + ++chartCount + '-' + Math.random().toString(36).slice(2, 7);
+    var root = svg('svg', { viewBox: '0 0 ' + W + ' ' + H, preserveAspectRatio: 'none', role: 'img', 'aria-label': chart.title });
+    root.style.height = H + 'px';
+    var grad = svg('linearGradient', { id: id, x1: 0, y1: 0, x2: 0, y2: 1 });
+    var top = svg('stop', { offset: '0%' });
+    top.style.cssText = 'stop-color: var(--success); stop-opacity: .45';
+    var bottom = svg('stop', { offset: '100%' });
+    bottom.style.cssText = 'stop-color: var(--success); stop-opacity: 0';
+    grad.appendChild(top);
+    grad.appendChild(bottom);
+    var defs = svg('defs', {});
+    defs.appendChild(grad);
+    root.appendChild(defs);
+    series.forEach(function (s, k) {
+      var n = s.points.length;
+      var pts = s.points.map(function (p, i) {
+        return (n > 1 ? (i / (n - 1)) * W : W / 2).toFixed(1) + ',' + (H - P - ((p[1] - min) / span) * (H - 2 * P)).toFixed(1);
+      }).join(' ');
+      var headline = k === series.length - 1;
+      if (headline) root.appendChild(svg('polygon', { points: pts + ' ' + W + ',' + H + ' 0,' + H, fill: 'url(#' + id + ')' }));
+      var line = svg('polyline', { points: pts, fill: 'none', 'stroke-width': headline ? 2.5 : 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke' });
+      line.style.stroke = headline ? 'var(--success)' : 'var(--text-mute)';
+      root.appendChild(line);
+    });
+    fig.appendChild(root);
+    var pts0 = series[0].points;
+    var axis = el('div', 'rrc-axis');
+    axis.appendChild(el('span', '', monthYear(pts0[0][0])));
+    axis.appendChild(el('span', '', monthYear(pts0[pts0.length - 1][0])));
+    fig.appendChild(axis);
+    fig.appendChild(legend(series.map(function (s, k) {
+      return { label: s.name, value: rupees(s.points[s.points.length - 1][1]), colour: k === series.length - 1 ? 'var(--success)' : 'var(--text-mute)' };
+    })));
+  }
+  function drawBars(fig, chart) {
+    var fmt = chart.unit === 'pct' ? function (v) { return inr.format(v) + '%'; } : rupees;
+    var max = Math.max.apply(null, chart.bars.map(function (b) { return Math.abs(b.value); })) || 1;
+    var list = el('div', 'rrc-bars');
+    chart.bars.forEach(function (b) {
+      var row = el('div', b.muted ? 'rrc-muted' : '');
+      row.appendChild(el('div', '', b.label));
+      var line = el('div', 'rrc-bar-line');
+      var bar = el('span', 'rrc-bar');
+      bar.style.width = 'calc(' + Math.abs(b.value) / max + ' * (100% - 6.5em))';
+      line.appendChild(bar);
+      line.appendChild(el('span', 'rrc-bar-value', fmt(b.value)));
+      row.appendChild(line);
+      list.appendChild(row);
+    });
+    fig.appendChild(list);
+  }
+  function drawDonut(fig, chart) {
+    var total = chart.slices.reduce(function (s, x) { return s + x.value; }, 0);
+    if (!(total > 0)) return;
+    var share = function (v) { return Math.round((v / total) * 100) + '%'; };
+    var colour = function (s, i) { return s.other ? OTHER : COLOURS[i % COLOURS.length]; };
+    var r = 40, C = 2 * Math.PI * r, gap = chart.slices.length > 1 ? 1.4 : 0, offset = 0;
+    var root = svg('svg', { viewBox: '0 0 100 100', role: 'img', 'aria-label': chart.title });
+    var ring = svg('g', { transform: 'rotate(-90 50 50)' });
+    chart.slices.forEach(function (s, i) {
+      var len = (s.value / total) * C;
+      var arc = svg('circle', { cx: 50, cy: 50, r: r, fill: 'none', stroke: colour(s, i), 'stroke-width': 14, 'stroke-dasharray': Math.max(len - gap, 0.3) + ' ' + C, 'stroke-dashoffset': -offset });
+      var tip = svg('title', {});
+      tip.textContent = s.label + ': ' + rupees(s.value) + ' (' + share(s.value) + ')';
+      arc.appendChild(tip);
+      ring.appendChild(arc);
+      offset += len;
+    });
+    root.appendChild(ring);
+    if (chart.center_label) {
+      var label = svg('text', { x: 50, y: 54, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 600 });
+      label.style.fill = 'var(--white)';
+      label.textContent = chart.center_label;
+      root.appendChild(label);
+    }
+    var layout = el('div', 'rrc-donut');
+    layout.appendChild(root);
+    layout.appendChild(legend(chart.slices.map(function (s, i) {
+      return { label: s.label + ' · ' + rupees(s.value), value: share(s.value), colour: colour(s, i) };
+    })));
+    fig.appendChild(layout);
+  }
+
+  // ---------- talking to the assistant ----------
+  /** Reads a streamed (SSE) reply and calls onEvent with each {type, ...} event. */
+  async function readSse(res, onEvent) {
+    var reader = res.body.getReader(), decoder = new TextDecoder(), buffer = '';
+    try {
+      for (;;) {
+        var chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true }).replace(/\r\n/g, '\n');
+        var idx;
+        while ((idx = buffer.indexOf('\n\n')) >= 0) {
+          var data = buffer.slice(0, idx).split('\n')
+            .filter(function (l) { return l.indexOf('data:') === 0; })
+            .map(function (l) { return l.slice(5).replace(/^\s+/, ''); })
+            .join('\n');
+          buffer = buffer.slice(idx + 2);
+          if (!data) continue;
+          var ev;
+          try { ev = JSON.parse(data); } catch (e) { continue; }
+          onEvent(ev);
+        }
+      }
+    } finally {
+      reader.cancel().catch(function () {});
+    }
+  }
+
+  var busy = false;
+  async function send(text) {
+    var message = String(text || '').trim();
+    if (!message || busy) return;
+    busy = true;
+    input.value = '';
+    var user = addMessage('user', message);
+    var sentAt = new Date();
+    var bot = addMessage('bot', '');
+    bot.md.innerHTML = '<span class="rrc-typing" aria-label="Typing"><i></i><i></i><i></i></span>';
+    var status = el('div', 'rrc-status');
+    var running = {};
+    var reply = '';
+    var frame = 0;
+    function showStatus(label) {
+      status.textContent = label + '…';
+      bot.wrap.appendChild(status);
+      toEnd();
+    }
+    function paint() {
+      frame = 0;
+      var stick = nearBottom();
+      bot.md.innerHTML = markdown(reply);
+      if (stick) toEnd();
+    }
+    try {
+      var body = { message: message };
+      if (conversationId) body.conversation_id = conversationId;
+      var answers = profile();
+      if (answers) body.profile = answers;
+      var res = await fetch(API + '/api/chat/stream', { method: 'POST', headers: headers(true), credentials: 'omit', body: JSON.stringify(body) });
+      if (!res.ok || !res.body || (res.headers.get('content-type') || '').indexOf('text/event-stream') < 0) {
+        var failure = new Error(ERRORS[res.status] || ERRORS.generic);
+        failure.shown = true;
+        failure.status = res.status;
+        try {
+          var j = await res.json();
+          if (j.message) failure.message = j.message;
+          failure.code = j.error;
+        } catch (e) { /* not JSON */ }
+        throw failure;
+      }
+      await readSse(res, function (ev) {
+        if (ev.type === 'meta') {
+          conversationId = ev.conversation_id;
+          write(convKey, conversationId);
+          stamp(user.time, sentAt, true);
+        } else if (ev.type === 'tool_start') {
+          running[ev.id] = ev.label;
+          showStatus(ev.label);
+        } else if (ev.type === 'tool_end') {
+          delete running[ev.id];
+          var left = Object.keys(running);
+          showStatus(left.length ? running[left[left.length - 1]] : 'Putting your answer together');
+        } else if (ev.type === 'chart') {
+          addChart(bot, ev.chart);
+        } else if (ev.type === 'delta') {
+          status.remove();
+          reply += ev.text;
+          if (!frame) frame = requestAnimationFrame(paint);
+        } else if (ev.type === 'rewind') {
+          // The server switched models mid-answer; drop the partial text it is regenerating.
+          reply = ev.reply;
+          if (!frame) frame = requestAnimationFrame(paint);
+        } else if (ev.type === 'done') {
+          reply = ev.reply || reply;
+        } else if (ev.type === 'error') {
+          var streamError = new Error(ev.message || ERRORS.generic);
+          streamError.shown = true;
+          streamError.code = ev.code;
+          throw streamError;
+        }
+      });
+      if (frame) cancelAnimationFrame(frame);
+      if (!reply.trim()) throw Object.assign(new Error(ERRORS.generic), { shown: true });
+      paint();
+      bot.time.textContent = clock();
+    } catch (err) {
+      if (frame) cancelAnimationFrame(frame);
+      if (reply) paint(); else bot.wrap.remove();
+      var final = err.status === 401 || err.status === 403 || FINAL.indexOf(err.code) >= 0;
+      addError(err.shown ? err.message : ERRORS.network, final ? null : function () {
+        user.wrap.remove();
+        bot.wrap.remove();
+        send(message);
+      });
+    } finally {
+      status.remove();
+      busy = false;
+    }
+  }
+
+  /** Shows the conversation so far (e.g. started in the floating chat on another page). */
+  async function loadHistory() {
+    if (!conversationId) return;
+    try {
+      var res = await fetch(API + '/api/conversations/' + encodeURIComponent(conversationId), { headers: headers(false), credentials: 'omit' });
+      if (res.status === 404) { conversationId = null; write(convKey, null); return; }
+      if (!res.ok) return;
+      var data = await res.json();
+      if (box.querySelector('.rrc-msg')) return; // a question was already asked here
+      (data.messages || []).forEach(function (m) {
+        var row = addMessage(m.role === 'assistant' ? 'bot' : 'user', m.text, m.at);
+        if (m.role === 'assistant') (m.charts || []).forEach(function (c) { addChart(row, c); });
+      });
+    } catch (e) { /* history is best-effort */ }
+  }
+
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      send(input.value);
+    }
+  });
+  loadHistory();
+})();
+</script>
 <!-- END: Robo Rupee chat (inline) -->
