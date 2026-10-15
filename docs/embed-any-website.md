@@ -23,6 +23,14 @@ Put it inside `<head>` or just before `</body>` in the template every page uses.
 | Shopify | Online Store → Themes → Edit code → `layout/theme.liquid`, before `</body>` |
 | Google Tag Manager | New tag → Custom HTML → paste the tag → trigger **All Pages** |
 
+### Inside the page instead of floating
+
+To show the chat as a card in the page (it scrolls with the page instead of staying fixed to the window),
+paste [`html-embed/chat-inline.html`](../html-embed/chat-inline.html) where the chat should appear, e.g. in
+place of the dashboard's "Ask AI" card. The floating tag above is also kept as
+[`html-embed/chat-floating.html`](../html-embed/chat-floating.html). Use one of them per page: if both are on
+a page, only one loads.
+
 ## 2. Allow the website on the server
 
 In `agent-service/.env` (or Vercel → Settings → Environment Variables):

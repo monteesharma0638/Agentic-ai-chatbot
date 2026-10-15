@@ -1,0 +1,25 @@
+<!--
+  Robo Rupee chat: FLOATING version (fixed).
+  An orb stays at the bottom centre of the window and opens the chat over the page. On pages with the
+  left sidebar (.rr-sidebar), the orb and the chat centre on the content beside it.
+
+  How to use
+  1. Paste everything from START to END just before </body>, on every page that should have the chat.
+  2. In dashboard.html, remove the page's own static orb so there aren't two:
+         <a href="dashboard.html" class="orb-btn position-fixed" …> … </a>
+
+  Good to know
+  - One chat per page: use this file or chat-inline.html on a page, not both (only one of them loads).
+  - The page's address must be in ALLOWED_ORIGINS on the chat server.
+  - It turns light or dark with the page's theme toggle (body.light-theme).
+  - If the chat is left open, it is still open on the next page (same browser tab).
+  - Optional attributes for the <script> tag (see docs/embed-any-website.md):
+      data-token="…"            signed-in user (greets them by name, "my investments" questions)
+      data-onboarding="false"   skip the quick questions before the first chat
+      data-teaser="false"       no one-time hello bubble above the orb
+      data-launcher-text="…"    tooltip of the orb (default "Ask" + the assistant's name)
+-->
+
+<!-- START: Robo Rupee chat (floating) -->
+<script src="https://mcp-server-ten-eta.vercel.app/embed.js" defer></script>
+<!-- END: Robo Rupee chat (floating) -->
