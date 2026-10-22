@@ -18,6 +18,9 @@
  *   data-launcher-text Tooltip and label of the orb (default "Ask <assistant name>")
  *   data-teaser       "false" to skip the one-time hello bubble above the orb
  *   data-onboarding   "false" to skip the quick questions asked before the first chat
+ *   data-voice        "false" to turn off speaking questions and hearing replies (on by default where supported)
+ *   data-voice-lang   Speech language for dictation and spoken replies (default "en-IN")
+ *   data-attachments  "false" to turn off attaching images / PDFs (on by default)
  *   data-accent       Focus-ring colour, e.g. "#7c5cff"
  *   data-theme        "light" | "dark" | "auto" (follows the OS). Default: light while the page's <body> has
  *                     the class "light-theme" (the app's theme toggle), dark otherwise.
@@ -196,6 +199,9 @@ function init(options = {}) {
     ...(opt('launcherText') && { launcherText: opt('launcherText') }),
     teaser: flag('teaser'),
     onboarding: flag('onboarding'),
+    voice: flag('voice'),
+    attachments: flag('attachments'),
+    ...(opt('voiceLang') && { voiceLang: opt('voiceLang') }),
     userName: claims.name,
     signedIn: Boolean(token),
     getContext: () => context,

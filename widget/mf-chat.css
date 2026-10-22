@@ -1140,6 +1140,207 @@
   text-align: center;
 }
 
+/* ---------- compose buttons: attach a file, speak a question ---------- */
+.mfc-file-input {
+  display: none;
+}
+.mfc-compose-btn {
+  flex: none;
+  align-self: flex-end;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mfc-muted);
+  display: grid;
+  place-items: center;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s var(--mfc-ease);
+}
+.mfc-compose-btn:hover {
+  background: var(--mfc-white-200);
+  color: var(--mfc-ink);
+}
+.mfc-compose-btn svg {
+  width: 22px;
+  height: 22px;
+}
+/* While dictating: a red mic with a soft pulsing ring. */
+.mfc-mic.mfc-listening {
+  color: var(--mfc-danger);
+  background: color-mix(in srgb, var(--mfc-danger) 16%, transparent);
+  animation: mfc-rec 1.4s ease-in-out infinite;
+}
+@keyframes mfc-rec {
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--mfc-danger) 14%, transparent);
+  }
+}
+
+/* header toggle for spoken replies */
+.mfc-voice-toggle {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mfc-ink);
+  display: grid;
+  place-items: center;
+}
+.mfc-voice-toggle:hover {
+  background: var(--mfc-white-100);
+}
+.mfc-voice-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+.mfc-voice-toggle[aria-pressed='false'] {
+  color: var(--mfc-muted);
+}
+
+/* ---------- attachment preview chips above the composer ---------- */
+.mfc-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mfc-attachments[hidden] {
+  display: none;
+}
+.mfc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 220px;
+  padding: 6px 6px 6px 8px;
+  border: 1px solid var(--mfc-white-200);
+  border-radius: 12px;
+  background: var(--mfc-field);
+}
+.mfc-chip-thumb {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+.mfc-chip-file {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--mfc-white-200);
+  color: var(--mfc-soft);
+}
+.mfc-chip-file svg {
+  width: 18px;
+  height: 18px;
+}
+.mfc-chip-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--mfc-soft);
+}
+.mfc-chip-remove {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mfc-muted);
+}
+.mfc-chip-remove:hover {
+  background: var(--mfc-white-200);
+  color: var(--mfc-ink);
+}
+.mfc-chip-remove svg {
+  width: 14px;
+  height: 14px;
+}
+.mfc-toast {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--mfc-white-100);
+  color: var(--mfc-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* files shown in the sent message bubble */
+.mfc-msg-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.mfc-msg-file-img {
+  max-width: 180px;
+  max-height: 180px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+.mfc-msg-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 10px;
+  background: var(--mfc-white-200);
+  font-size: 13px;
+  color: var(--mfc-soft);
+}
+
+/* ---------- unread badge on the orb (a reply arrived while minimised) ---------- */
+.mfc-badge {
+  position: fixed;
+  left: calc(50% + var(--mfc-offset-x, 0px) + 22px);
+  bottom: 68px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--mfc-danger);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--mfc-bg);
+  pointer-events: none;
+  transform: scale(0);
+  transition: transform 0.25s var(--mfc-ease);
+  z-index: 2147483001;
+}
+.mfc-has-unread .mfc-badge {
+  transform: scale(1);
+  animation: mfc-badge-pop 1.8s ease-in-out infinite;
+}
+@keyframes mfc-badge-pop {
+  50% {
+    box-shadow: 0 0 0 2px var(--mfc-bg), 0 0 0 7px color-mix(in srgb, var(--mfc-danger) 28%, transparent);
+  }
+}
+@media (max-width: 520px) {
+  .mfc-badge {
+    left: calc(50% + var(--mfc-offset-x, 0px) + 18px);
+    bottom: 60px;
+  }
+}
+
 /* ---------- one-time hello above the orb ---------- */
 .mfc-teaser {
   position: fixed;

@@ -215,6 +215,11 @@ const ICONS = {
   plus: icon('<path d="M5 12h14"/><path d="M12 5v14"/>'),
   copy: icon('<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>'),
   share: icon('<path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>'),
+  mic: icon('<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>'),
+  attach: icon('<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>'),
+  volume: icon('<path d="M11 4.7a.7.7 0 0 0-1.16-.54L6 7.5H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h3l3.84 3.34A.7.7 0 0 0 11 19.3z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  volumeOff: icon('<path d="M11 4.7a.7.7 0 0 0-1.16-.54L6 7.5H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h3l3.84 3.34A.7.7 0 0 0 11 19.3z"/><path d="m23 9-6 6"/><path d="m17 9 6 6"/>'),
+  file: icon('<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/>'),
 };
 
 function avatar() {
@@ -248,6 +253,9 @@ function glassButton(label, size = '') {
  * @param {string} [opts.storageKey]      localStorage key for the conversation id
  * @param {string} [opts.profileKey]      localStorage key for the answers to the quick questions
  * @param {boolean} [opts.onboarding]     Ask the quick questions before the first chat (default true)
+ * @param {boolean} [opts.voice]          Speak questions (mic) and hear replies, where the browser allows it (default true)
+ * @param {boolean} [opts.attachments]    Attach images / PDFs to a message (default true)
+ * @param {string}  [opts.voiceLang]      Speech language for dictation and spoken replies (default 'en-IN')
  * @param {string} [opts.userName]        First name, used in the greeting
  * @param {boolean} [opts.signedIn]       Offer "my investments" questions
  * @param {boolean} [opts.teaser]         Show a one-time hello above the launcher (floating mode)
@@ -289,6 +297,9 @@ export function mountMfChat(root, opts) {
   const teaserSeen = storage('mf-chat:teaser-seen');
   // Per tab, so a chat left open carries over to the next page of the site but not to new tabs.
   const leftOpen = storage('mf-chat:open', 'sessionStorage');
+  const voiceMuteStore = storage('mf-chat:voice-muted');
+  // Per tab: an answer that arrived while the chat was minimised stays flagged across in-site navigation.
+  const unreadStore = storage('mf-chat:unread', 'sessionStorage');
 
   let conversationId = store.get();
   let controller = null;
@@ -296,6 +307,25 @@ export function mountMfChat(root, opts) {
   const features = { assistantName: '', appName: '', portfolio: false };
   // Touch devices: don't pop the keyboard up over an answer the person is about to read.
   const finePointer = window.matchMedia?.('(pointer: fine)').matches ?? true;
+
+  // Voice and file upload degrade silently where the browser or the host page doesn't allow them.
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const voiceOn = o.voice !== false;
+  const sttSupported = voiceOn && Boolean(SpeechRecognition) && window.isSecureContext;
+  const ttsSupported = voiceOn && 'speechSynthesis' in window;
+  const uploadsOn = o.attachments !== false && typeof FileReader !== 'undefined';
+  const voiceLang = o.voiceLang || 'en-IN';
+  const MAX_ATTACHMENTS = 4;
+  const MAX_FILE_MB = 3; // raw file; base64 adds ~33%, kept under the server's body limit (and Vercel's ~4.5 MB)
+  const MAX_TOTAL_CHARS = 4_200_000; // combined base64 across attachments
+  const MAX_IMAGE_DIM = 1024;
+
+  /** Files attached to the next message (image/PDF). Sent once; cleared on send. */
+  let attachments = [];
+  /** True when the pending message came from the mic, so the reply is read aloud. */
+  let spokeLast = false;
+  let voiceMuted = voiceMuteStore.get() === '1';
+  let unread = Number(unreadStore.get()) || 0;
 
   /** Saved answers ({...answers, risk, done} or {skipped}), or null if the questions were never offered. */
   let profile = null;
@@ -318,6 +348,9 @@ export function mountMfChat(root, opts) {
   launcher.append(el('span', 'mfc-orb-face'));
   const tooltip = el('span', 'mfc-tooltip');
   tooltip.setAttribute('aria-hidden', 'true');
+  // Sits outside the orb's circular clip, so it isn't clipped; shown when a reply lands while minimised.
+  const badge = el('span', 'mfc-badge');
+  badge.setAttribute('aria-hidden', 'true');
 
   const panel = el('section', 'mfc-panel');
   const card = el('div', 'mfc-card');
@@ -332,10 +365,13 @@ export function mountMfChat(root, opts) {
   const subtitleEl = el('span', 'mfc-subtitle');
   subtitleEl.append(el('i', 'mfc-online'), document.createTextNode(o.subtitle));
   heading.append(titleEl, subtitleEl);
+  // Mute / unmute spoken replies (only when the browser can speak).
+  const speakerBtn = el('button', 'mfc-voice-toggle');
+  speakerBtn.type = 'button';
   const plus = el('span');
   plus.innerHTML = ICONS.plus;
   const resetBtn = glassButton([plus.firstChild, 'New chat'], 'mfc-glass-xs mfc-new');
-  header.append(closeBtn, heading, resetBtn);
+  header.append(closeBtn, heading, ...(ttsSupported ? [speakerBtn] : []), resetBtn);
 
   const log = el('div', 'mfc-log');
   log.setAttribute('role', 'log');
@@ -346,23 +382,49 @@ export function mountMfChat(root, opts) {
   let welcomeAfterQuestions = false;
 
   const footer = el('div', 'mfc-footer');
+  // Chips for files queued for the next message; empty and hidden until something is attached.
+  const attachBar = el('div', 'mfc-attachments');
+  attachBar.hidden = true;
   const form = el('form', 'mfc-composer');
   const bar = el('div', 'mfc-input-bar');
+
+  const fileInput = el('input', 'mfc-file-input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/png,image/jpeg,image/webp,application/pdf';
+  fileInput.multiple = true;
+  fileInput.setAttribute('aria-hidden', 'true');
+  fileInput.tabIndex = -1;
+
+  const attachBtn = el('button', 'mfc-compose-btn mfc-attach');
+  attachBtn.type = 'button';
+  attachBtn.setAttribute('aria-label', 'Attach an image or PDF');
+  attachBtn.innerHTML = ICONS.attach;
+
   const input = el('textarea', 'mfc-input');
   input.rows = 1;
   input.placeholder = o.placeholder;
   input.maxLength = 2000;
   input.setAttribute('aria-label', 'Your question');
   input.setAttribute('enterkeyhint', 'send');
+
+  const micBtn = el('button', 'mfc-compose-btn mfc-mic');
+  micBtn.type = 'button';
+  micBtn.setAttribute('aria-label', 'Speak your question');
+  micBtn.innerHTML = ICONS.mic;
+
   const sendBtn = el('button', 'mfc-send');
-  bar.append(input, sendBtn);
+  if (uploadsOn) bar.append(attachBtn);
+  bar.append(input);
+  if (sttSupported) bar.append(micBtn);
+  bar.append(sendBtn);
   form.append(bar);
-  footer.append(form, el('p', 'mfc-disclaimer', o.disclaimer));
+  if (uploadsOn) footer.append(fileInput);
+  footer.append(attachBar, form, el('p', 'mfc-disclaimer', o.disclaimer));
 
   card.append(header, log, footer);
   panel.append(card);
   root.append(panel);
-  if (o.mode === 'floating') root.append(launcher, tooltip);
+  if (o.mode === 'floating') root.append(launcher, tooltip, badge);
 
   const launcherLabel = () => o.launcherText || (features.assistantName ? `Ask ${features.assistantName}` : 'Ask about funds');
   const syncTitle = () => {
@@ -387,7 +449,7 @@ export function mountMfChat(root, opts) {
     sendBtn.innerHTML = busy ? ICONS.stop : ICONS.send;
     sendBtn.setAttribute('aria-label', busy ? 'Stop answering' : 'Send');
     sendBtn.type = busy ? 'button' : 'submit';
-    sendBtn.disabled = !busy && !input.value.trim();
+    sendBtn.disabled = !busy && !input.value.trim() && attachments.length === 0;
   };
   const setBusy = (busy) => {
     root.classList.toggle('mfc-busy', busy);
@@ -481,7 +543,27 @@ export function mountMfChat(root, opts) {
     scrollToEnd();
   }
 
-  function addMessage(role, text = '', at) {
+  /** A thumbnail (images) or a file chip (PDFs) for the files sent with a user message. */
+  function renderMessageFiles(files) {
+    const gallery = el('div', 'mfc-msg-files');
+    for (const f of files) {
+      if (f.kind === 'image' && f.url) {
+        const img = el('img', 'mfc-msg-file-img');
+        img.src = f.url;
+        img.alt = f.name || 'Attached image';
+        gallery.append(img);
+      } else {
+        const chip = el('span', 'mfc-msg-file');
+        const fileIcon = el('span', 'mfc-chip-file');
+        fileIcon.innerHTML = ICONS.file;
+        chip.append(fileIcon, el('span', 'mfc-chip-name', f.name || 'Attachment'));
+        gallery.append(chip);
+      }
+    }
+    return gallery;
+  }
+
+  function addMessage(role, text = '', at, files) {
     welcome.remove();
     root.classList.add('mfc-has-messages');
     const row = messageRow(role);
@@ -489,6 +571,7 @@ export function mountMfChat(root, opts) {
       if (text) renderInto(row.content, text);
       if (at) row.time.textContent = clock(new Date(at));
     } else {
+      if (files?.length) row.bubble.insertBefore(renderMessageFiles(files), row.content);
       row.content.textContent = text;
       stampUser(row.time, at ? new Date(at) : new Date(), Boolean(at));
     }
@@ -865,14 +948,249 @@ export function mountMfChat(root, opts) {
     ...(typeof o.headers === 'function' ? o.headers() : o.headers),
   });
 
+  // ---------- attachments (image / PDF, sent to the model once, never stored) ----------
+  let toastTimer = 0;
+  /** A brief notice above the composer (e.g. a file was too large); replaces any previous one. */
+  function showToast(message) {
+    clearTimeout(toastTimer);
+    let toast = footer.querySelector('.mfc-toast');
+    if (!toast) {
+      toast = el('div', 'mfc-toast');
+      toast.setAttribute('role', 'status');
+      footer.insertBefore(toast, attachBar);
+    }
+    toast.textContent = message;
+    toastTimer = setTimeout(() => toast.remove(), 4500);
+  }
+
+  const readBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('read_failed'));
+      reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+      reader.readAsDataURL(file);
+    });
+
+  /** Shrinks a photo/screenshot to at most MAX_IMAGE_DIM px and re-encodes as JPEG, so the upload stays small and cheap. */
+  async function downscaleImage(file) {
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => null);
+    let source = bitmap;
+    let width = bitmap?.width ?? 0;
+    let height = bitmap?.height ?? 0;
+    if (!bitmap) {
+      const url = URL.createObjectURL(file);
+      try {
+        source = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error('decode_failed'));
+          img.src = url;
+        });
+        width = source.naturalWidth;
+        height = source.naturalHeight;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+    const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(width || 1, height || 1));
+    const canvas = el('canvas');
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const ctx = canvas.getContext('2d');
+    // A white backdrop so transparent PNGs don't turn black once flattened to JPEG.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    bitmap?.close?.();
+    const url = canvas.toDataURL('image/jpeg', 0.72);
+    return { mime_type: 'image/jpeg', data: url.split(',')[1], url, kind: 'image' };
+  }
+
+  async function toAttachment(file) {
+    if (file.type === 'application/pdf') {
+      if (file.size > MAX_FILE_MB * 1024 * 1024)
+        throw new Error(`“${file.name}” is too large (max ${MAX_FILE_MB} MB). Try a smaller PDF or a screenshot.`);
+      return { mime_type: 'application/pdf', data: await readBase64(file), name: file.name || 'document.pdf', kind: 'pdf' };
+    }
+    if (file.type.startsWith('image/')) {
+      const att = await downscaleImage(file);
+      return { ...att, name: file.name || 'image.jpg' };
+    }
+    throw new Error('You can attach images or PDF files.');
+  }
+
+  async function addFiles(fileList) {
+    for (const file of [...fileList]) {
+      if (attachments.length >= MAX_ATTACHMENTS) {
+        showToast(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+        break;
+      }
+      try {
+        const att = await toAttachment(file);
+        const total = attachments.reduce((s, a) => s + a.data.length, 0) + att.data.length;
+        if (total > MAX_TOTAL_CHARS) {
+          showToast('These files are too large together. Remove one and try again.');
+          continue;
+        }
+        attachments.push(att);
+      } catch (err) {
+        showToast(err?.message || "Sorry, that file couldn't be added.");
+      }
+    }
+    renderAttachBar();
+    syncSend();
+  }
+
+  function renderAttachBar() {
+    attachBar.replaceChildren();
+    attachBar.hidden = attachments.length === 0;
+    attachments.forEach((att, i) => {
+      const chip = el('div', 'mfc-chip');
+      if (att.kind === 'image' && att.url) {
+        const thumb = el('img', 'mfc-chip-thumb');
+        thumb.src = att.url;
+        thumb.alt = '';
+        chip.append(thumb);
+      } else {
+        const fileIcon = el('span', 'mfc-chip-file');
+        fileIcon.innerHTML = ICONS.file;
+        chip.append(fileIcon);
+      }
+      chip.append(el('span', 'mfc-chip-name', att.name));
+      const remove = el('button', 'mfc-chip-remove');
+      remove.type = 'button';
+      remove.setAttribute('aria-label', `Remove ${att.name}`);
+      remove.innerHTML = ICONS.close;
+      remove.addEventListener('click', () => {
+        attachments.splice(i, 1);
+        renderAttachBar();
+        syncSend();
+      });
+      chip.append(remove);
+      attachBar.append(chip);
+    });
+  }
+
+  // ---------- voice (speech in and out, all in the browser — no server cost) ----------
+  let voices = [];
+  if (ttsSupported) {
+    const loadVoices = () => (voices = window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.addEventListener?.('voiceschanged', loadVoices);
+  }
+  /** Prefer an exact language match (e.g. en-IN), then the same base language, else the browser default. */
+  function pickVoice(lang) {
+    const base = lang.toLowerCase().split('-')[0];
+    return (
+      voices.find((v) => v.lang?.toLowerCase() === lang.toLowerCase()) ||
+      voices.find((v) => v.lang?.toLowerCase().startsWith(base)) ||
+      null
+    );
+  }
+  function speak(text) {
+    if (!ttsSupported || voiceMuted || !text.trim()) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = voiceLang;
+      const voice = pickVoice(voiceLang);
+      if (voice) utter.voice = voice;
+      window.speechSynthesis.speak(utter);
+    } catch {
+      /* speech synthesis unavailable */
+    }
+  }
+  function stopSpeaking() {
+    if (!ttsSupported) return;
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  let recognition = null;
+  let listening = false;
+  function stopDictation() {
+    try {
+      recognition?.stop();
+    } catch {
+      /* ignore */
+    }
+  }
+  function startDictation() {
+    if (!sttSupported || listening) return;
+    stopSpeaking();
+    recognition = new SpeechRecognition();
+    recognition.lang = voiceLang;
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    const base = input.value.trim();
+    recognition.addEventListener('result', (e) => {
+      let heard = '';
+      for (let i = 0; i < e.results.length; i++) heard += e.results[i][0].transcript;
+      input.value = (base ? `${base} ` : '') + heard;
+      autosize();
+      // The reply is read back only when the question itself was spoken.
+      spokeLast = Boolean(input.value.trim());
+      syncSend();
+    });
+    recognition.addEventListener('error', (e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed')
+        showToast('Microphone access is blocked. Allow it in your browser to speak.');
+      else if (e.error === 'no-speech') showToast("I didn't catch that. Tap the mic and try again.");
+    });
+    recognition.addEventListener('end', () => {
+      listening = false;
+      micBtn.classList.remove('mfc-listening');
+      micBtn.setAttribute('aria-label', 'Speak your question');
+      if (finePointer) input.focus();
+    });
+    try {
+      recognition.start();
+      listening = true;
+      micBtn.classList.add('mfc-listening');
+      micBtn.setAttribute('aria-label', 'Stop listening');
+    } catch {
+      listening = false;
+    }
+  }
+
+  function updateSpeakerBtn() {
+    speakerBtn.innerHTML = voiceMuted ? ICONS.volumeOff : ICONS.volume;
+    const label = voiceMuted ? 'Turn spoken replies on' : 'Turn spoken replies off';
+    speakerBtn.setAttribute('aria-label', label);
+    speakerBtn.setAttribute('aria-pressed', String(!voiceMuted));
+    speakerBtn.title = label;
+  }
+  if (ttsSupported) updateSpeakerBtn();
+
+  // ---------- unread badge on the orb (a reply finished while minimised) ----------
+  function setUnread(n) {
+    unread = Math.max(0, n);
+    unreadStore.set(unread ? String(unread) : null);
+    root.classList.toggle('mfc-has-unread', unread > 0);
+    badge.textContent = unread > 9 ? '9+' : unread ? String(unread) : '';
+    if (o.mode === 'floating' && !isOpen())
+      launcher.setAttribute('aria-label', unread ? `${launcherLabel()} (${unread} new)` : launcherLabel());
+  }
+
   // ---------- actions ----------
   async function send(text) {
-    const message = (text ?? input.value).trim();
-    if (!message || controller) return;
+    if (controller) return;
+    const files = attachments;
+    const typed = (text ?? input.value).trim();
+    const message = typed || (files.length ? 'Please take a look at this and help me understand it.' : '');
+    if (!message) return;
     endQuestions();
+    const speakReply = spokeLast && ttsSupported && !voiceMuted;
+    spokeLast = false;
+    stopSpeaking();
+    attachments = [];
+    renderAttachBar();
     input.value = '';
     autosize();
-    const { wrap: userWrap, time: userTime } = addMessage('user', message);
+    const { wrap: userWrap, time: userTime } = addMessage('user', message, undefined, files);
     const sentAt = new Date();
     const { wrap, body, content, time } = addMessage('assistant');
     wrap.classList.add('mfc-pending');
@@ -926,6 +1244,7 @@ export function mountMfChat(root, opts) {
           ...extra,
           ...(answers && { profile: answers }),
           message,
+          ...(files.length && { attachments: files.map(({ mime_type, data, name }) => ({ mime_type, data, name })) }),
           ...(conversationId && { conversation_id: conversationId }),
         }),
         signal: controller.signal,
@@ -985,6 +1304,9 @@ export function mountMfChat(root, opts) {
       paint();
       time.textContent = clock();
       addActions(body, content);
+      if (speakReply) speak(content.innerText);
+      // A reply that lands while the chat is minimised lights up the orb.
+      if (o.mode === 'floating' && !isOpen()) setUnread(unread + 1);
       if (stick) scrollToEnd();
     } catch (err) {
       if (frame) cancelAnimationFrame(frame);
@@ -1067,6 +1389,12 @@ export function mountMfChat(root, opts) {
 
   function reset() {
     controller?.abort();
+    stopSpeaking();
+    stopDictation();
+    attachments = [];
+    renderAttachBar();
+    spokeLast = false;
+    setUnread(0);
     if (conversationId && o.resetUrl) {
       fetch(o.resetUrl.replace('{id}', encodeURIComponent(conversationId)), {
         method: 'DELETE',
@@ -1120,6 +1448,7 @@ export function mountMfChat(root, opts) {
   }
   function open(focus = true) {
     hideTeaser();
+    setUnread(0);
     root.classList.add('mfc-open');
     launcher.setAttribute('aria-expanded', 'true');
     // While the chat is open, the orb closes it.
@@ -1128,6 +1457,7 @@ export function mountMfChat(root, opts) {
     if (focus && finePointer) setTimeout(() => input.focus(), 50);
   }
   function close() {
+    stopSpeaking();
     leftOpen.set(null);
     root.classList.remove('mfc-open');
     launcher.setAttribute('aria-expanded', 'false');
@@ -1151,8 +1481,33 @@ export function mountMfChat(root, opts) {
   });
   input.addEventListener('input', () => {
     autosize();
+    // Typing after dictation means this is a typed question; don't read the reply aloud.
+    spokeLast = false;
     syncSend();
   });
+  if (uploadsOn) {
+    attachBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files?.length) addFiles(fileInput.files);
+      fileInput.value = '';
+    });
+    // Paste an image (e.g. a screenshot) straight into the box.
+    input.addEventListener('paste', (e) => {
+      const images = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+      if (images.length) {
+        e.preventDefault();
+        addFiles(images);
+      }
+    });
+  }
+  if (sttSupported) micBtn.addEventListener('click', () => (listening ? stopDictation() : startDictation()));
+  if (ttsSupported)
+    speakerBtn.addEventListener('click', () => {
+      voiceMuted = !voiceMuted;
+      voiceMuteStore.set(voiceMuted ? '1' : null);
+      if (voiceMuted) stopSpeaking();
+      updateSpeakerBtn();
+    });
   resetBtn.addEventListener('click', reset);
   launcher.addEventListener('click', () => (isOpen() ? close() : open()));
   closeBtn.addEventListener('click', close);
@@ -1161,6 +1516,9 @@ export function mountMfChat(root, opts) {
   });
 
   syncSend();
+  renderAttachBar();
+  // A reply that arrived while minimised, on an earlier page of this visit, still shows on the orb.
+  if (o.mode === 'floating' && unread) setUnread(unread);
   // Reopen a chat the visitor left open on the previous page, without taking focus from the new page.
   if (o.mode === 'floating' && leftOpen.get()) open(false);
   // A late settings response still personalises the title and greeting.
@@ -1183,6 +1541,8 @@ export function mountMfChat(root, opts) {
     refreshWelcome,
     destroy() {
       controller?.abort();
+      stopSpeaking();
+      stopDictation();
       hideTeaser();
       charts.forEach((c) => c.destroy());
       root.innerHTML = '';

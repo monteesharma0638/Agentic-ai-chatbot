@@ -78,6 +78,11 @@ const EnvSchema = z.object({
   /** Per-IP limit across all users (protects guest mode). */
   RATE_LIMIT_PER_IP_PER_MINUTE: z.coerce.number().int().default(60),
   MAX_MESSAGE_CHARS: z.coerce.number().int().default(2000),
+  /**
+   * Largest chat request body, in MB. A message may carry an attached image or PDF inside it, so this
+   * is higher than the usual JSON limit. Keep it under your host's own body cap (Vercel is ~4.5 MB).
+   */
+  MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(20).default(6),
 
   APP_NAME: z.string().default('MF Invest'),
   ASSISTANT_NAME: z.string().default('Fundy'),

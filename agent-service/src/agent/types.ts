@@ -25,9 +25,23 @@ export const InvestorProfileSchema = z.object({
   risk: answer(['conservative', 'moderate', 'aggressive']),
 });
 
+/**
+ * A file the user attached to one message (a screenshot, photo or PDF). Sent to the model for that
+ * turn only and never stored: the agent strips these parts before persisting the conversation.
+ * `data` is base64 with no `data:` prefix; its size is bounded by the chat route's body limit.
+ */
+export const AttachmentSchema = z.object({
+  mime_type: z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
+  data: z.string().min(1).max(6_000_000),
+  name: z.string().max(200).optional(),
+});
+export type Attachment = z.infer<typeof AttachmentSchema>;
+
 /** Body the widget POSTs. Identity never comes from the body — it comes from the verified token. */
 export const ChatBodySchema = z.object({
   message: z.string().trim().min(1),
+  /** Unknown/oversized attachments are dropped rather than failing the whole message. */
+  attachments: z.array(AttachmentSchema).max(4).optional().catch(undefined),
   conversation_id: z
     .string()
     .regex(/^[A-Za-z0-9_-]{8,64}$/, 'conversation_id must be 8-64 chars [A-Za-z0-9_-]')
@@ -60,6 +74,8 @@ export interface ChatInput {
   user: ChatUser;
   context?: PageContext | null;
   profile?: InvestorProfile | null;
+  /** Files attached to this message; sent to the model once and never stored. */
+  attachments?: Attachment[];
 }
 
 export interface ChartSeries {

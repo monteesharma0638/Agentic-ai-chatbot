@@ -85,6 +85,9 @@ Add any of these attributes to the tag:
 | `data-launcher-text` | Tooltip and label of the orb (default "Ask" + `ASSISTANT_NAME`) |
 | `data-teaser="false"` | Turn off the one-time hello bubble above the orb |
 | `data-onboarding="false"` | Skip the quick questions before the first chat |
+| `data-voice="false"` | Turn off speaking questions (mic) and hearing replies. On by default where the browser supports it |
+| `data-voice-lang` | Speech language for dictation and spoken replies (default `en-IN`) |
+| `data-attachments="false"` | Turn off attaching images / PDFs to a message |
 | `data-offset-x` | Move the orb and chat sideways from the window centre, in px (e.g. `40`); overrides the sidebar check |
 | `data-open` | Open the chat when the page loads |
 | `data-scheme-code` / `data-scheme-name` | On a fund's page, so visitors can ask about "this fund" |

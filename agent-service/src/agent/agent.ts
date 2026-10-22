@@ -18,7 +18,7 @@ import { LOCAL_TOOLS, type LocalToolContext } from './localTools.js';
 import { chartsFromToolResult, toolLabel } from './presentation.js';
 import { buildSystemInstruction } from './prompt.js';
 import { toFunctionDeclaration } from './schema.js';
-import type { AgentEvent, Chart, ChatInput, ConversationRecord, Usage } from './types.js';
+import type { AgentEvent, Attachment, Chart, ChatInput, ConversationRecord, Usage } from './types.js';
 
 /** The subset of `GoogleGenAI.models` the agent needs — lets tests inject a fake model. */
 export interface ModelClient {
@@ -79,6 +79,11 @@ interface StepResult {
 function errorStatus(err: unknown): number | undefined {
   const status = (err as { status?: unknown })?.status;
   return typeof status === 'number' ? status : undefined;
+}
+
+/** Attached images / PDFs become inline parts on the user turn; they are sent to the model but never stored. */
+function attachmentParts(attachments?: Attachment[]): Part[] {
+  return (attachments ?? []).map((a) => ({ inlineData: { mimeType: a.mime_type, data: a.data } }));
 }
 
 /**
@@ -224,8 +229,9 @@ export class MfAgent {
 
       const contents: Content[] = [
         ...compactHistory(record.contents, config.HISTORY_MAX_TURNS, config.HISTORY_FULL_TURNS),
-        { role: 'user', parts: [{ text: req.message }] },
+        { role: 'user', parts: [{ text: req.message }, ...attachmentParts(req.attachments)] },
       ];
+      const userTurnIndex = contents.length - 1;
 
       const toolCtx: LocalToolContext = {
         hub,
@@ -249,6 +255,7 @@ export class MfAgent {
         hasPortfolio: localTools.some((t) => t.declaration.name === 'get_my_portfolio'),
         page: req.context ?? undefined,
         profile: req.profile ?? undefined,
+        hasAttachments: Boolean(req.attachments?.length),
       });
 
       let reply = '';
@@ -366,6 +373,8 @@ export class MfAgent {
       }
 
       const at = new Date().toISOString();
+      // Never store uploaded files: drop the attachment parts from the user turn before persisting.
+      if (req.attachments?.length) contents[userTurnIndex] = { role: 'user', parts: [{ text: req.message }] };
       record.contents = compactHistory(contents, config.HISTORY_MAX_TURNS, config.HISTORY_FULL_TURNS);
       record.transcript = [
         ...record.transcript,

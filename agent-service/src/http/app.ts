@@ -76,7 +76,9 @@ export function createApp(deps: {
     if (req.method === 'OPTIONS') return void res.status(204).end();
     next();
   });
-  app.use('/api', express.json({ limit: '32kb' }));
+  // A chat message may carry an attached image or PDF, so the two chat routes get a larger body limit;
+  // every other endpoint takes no body. (Mounted per route below rather than blanket over /api.)
+  const chatJson = express.json({ limit: `${config.MAX_UPLOAD_MB}mb` });
 
   // ---------- identity ----------
   const identify = (req: Request, res: Response, next: NextFunction) => {
@@ -128,6 +130,7 @@ export function createApp(deps: {
       conversationId: parsed.data.conversation_id,
       context: parsed.data.context,
       profile: parsed.data.profile,
+      attachments: parsed.data.attachments,
       user: req.chatUser!,
     };
   };
@@ -152,7 +155,7 @@ export function createApp(deps: {
       .json({ status: ok ? 'ok' : 'degraded', model: config.GEMINI_MODEL, store: store.kind, mcp: servers });
   });
 
-  app.post('/api/chat/stream', identify, async (req, res) => {
+  app.post('/api/chat/stream', identify, chatJson, async (req, res) => {
     const input = parseChat(req, res);
     if (!input) return;
     const signal = abortOnClose(res);
@@ -178,7 +181,7 @@ export function createApp(deps: {
   });
 
   /** Non-streaming variant (mobile apps, server-side callers, testing). */
-  app.post('/api/chat', identify, async (req, res) => {
+  app.post('/api/chat', identify, chatJson, async (req, res) => {
     const input = parseChat(req, res);
     if (!input) return;
     const signal = abortOnClose(res);
