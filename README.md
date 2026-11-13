@@ -8,26 +8,26 @@ official AMFI NAV data, and streams back an answer with charts.
 - "If I had started a ₹10,000 SIP in HDFC Mid Cap in Jan 2019 with a 10% yearly step-up, what would it be worth?"
 - "Top 5 small cap funds by 3-year returns — and which had the smallest drawdown?"
 - "Estimate what ₹5 lakh in a Nifty 50 index fund could become in 10 years."
-- "How is my portfolio doing?" (signed-in users; reads holdings from your database)
+- "How is my portfolio doing?" (signed-in users; built-in demo holdings — see "My portfolio" below)
 
-Everything runs on **Node.js / TypeScript**. Your Laravel app only adds a `<script>` tag:
-see [`laravel-embed/README.md`](laravel-embed/README.md). Any other website (WordPress, Shopify,
-plain HTML) pastes the same tag into its header or footer: see [`docs/embed-any-website.md`](docs/embed-any-website.md).
+Everything runs on **Node.js / TypeScript**, self-contained with its own MongoDB — no external app
+database is needed. A website embeds it with one `<script>` tag: a Laravel app can use
+[`laravel-embed/README.md`](laravel-embed/README.md); any other site (WordPress, Shopify, plain HTML)
+pastes the same tag into its header or footer: see [`docs/embed-any-website.md`](docs/embed-any-website.md).
 
 ## Architecture
 
 ```
- Laravel page (any site)                 agent-service  (Node.js, :3000)              mcp-server (Node.js, :3100)
+ Website (any site)                      agent-service  (Node.js, :3000)              mcp-server (Node.js, :3100)
 ┌───────────────────────┐   HTTPS/SSE   ┌──────────────────────────────┐  MCP over   ┌───────────────────────────┐
 │ <script src=".../     │ ────────────▶ │ /embed.js   chat widget      │  HTTP       │ 14 tools: search, NAV     │
-│   embed.js"           │   signed user │ /api/chat/stream (SSE)       │ ──────────▶ │ history, SIP/lumpsum,     │
-│   data-token="…">     │   token       │ Gemini agent loop            │             │ risk, rolling returns,    │
+│   embed.js"           │   user JWT    │ /api/chat/stream (SSE)       │ ──────────▶ │ history, SIP/lumpsum,     │
+│   data-token="…">     │   (Bearer)    │ Gemini agent loop            │             │ risk, rolling returns,    │
 │                       │ ◀──────────── │  ├ Gemini Flash-Lite (+failover)            │ compare, rank, projection,│
-│ Shadow-DOM widget,    │   streamed    │  ├ conversation memory       │             │ portfolio valuation       │
-│ charts, markdown      │   text+charts │  └ get_my_portfolio ─┐       │             └────────────┬──────────────┘
-└───────────────────────┘               └──────────────────────┼───────┘                          │
-                                                               │ read-only SQL                    │ cached HTTP
-                                                        your MySQL DB                 AMFI NAVAll.txt + mfapi.in
+│ Shadow-DOM widget,    │   streamed    │  ├ get_my_portfolio (demo)   │             │ portfolio valuation       │
+│ charts, markdown      │   text+charts │  └ chats + usage ─┐          │             └────────────┬──────────────┘
+└───────────────────────┘               └───────────────────┼──────────┘                          │ cached HTTP
+                                                          MongoDB                     AMFI NAVAll.txt + mfapi.in
 ```
 
 | Folder | What it is |
@@ -98,14 +98,15 @@ Or over HTTP at `http://host:3100/mcp` with `Authorization: Bearer $MCP_AUTH_TOK
 
 ## How the agent works
 
-1. The widget POSTs `{message, conversation_id?, context?}` with the signed user token.
+1. The widget POSTs `{message, conversation_id?, context?}` with the user's JWT as a Bearer token.
 2. The agent loads the conversation, builds the system prompt (today's date, compliance rules, user
    context such as the fund page being viewed) and sends the MCP tools to Gemini as function declarations.
 3. Gemini calls tools, often several in parallel. The agent runs them, streams `tool_start`/`tool_end`
    progress and `chart` events, and feeds results back. This repeats for up to `AGENT_MAX_STEPS`; the final
    step is forced to answer.
-4. Text streams to the browser as it's generated. The turn is saved: recent turns keep full tool detail,
-   older turns keep only the final answers, so token cost stays flat in long chats.
+4. Text streams to the browser as it's generated. The turn is saved to MongoDB (chats and token usage,
+   keyed by user id); recent turns keep full tool detail, older turns keep only the final answers, so
+   token cost stays flat in long chats.
 
 **Speed and reliability:**
 - `gemini-3.5-flash-lite` is the default model: about 1 s per model step, and most questions finish in 4–6 s.
@@ -126,40 +127,39 @@ Or over HTTP at `http://host:3100/mcp` with `Authorization: Bearer $MCP_AUTH_TOK
 | `GEMINI_FALLBACK_MODELS` | `gemini-3.6-flash,gemini-3.8-flash` | Tried in order on overload, quota, errors or stalls. |
 | `GEMINI_THINKING_LEVEL` | `low` | `minimal`/`low`/`medium`/`high`/empty. Dropped per model if that model rejects it. |
 | `MODEL_STALL_TIMEOUT_MS` / `MODEL_COOLDOWN_SECONDS` | `20000` / `60` | Failover on a silent stream; how long a failed model is tried last. |
-| `WIDGET_TOKEN_SECRET` | — | Shared with Laravel (`MF_CHAT_SECRET`), ≥ 32 chars. |
+| `WIDGET_TOKEN_SECRET` | — | Secret that verifies the website's JWT (HS256), ≥ 32 chars. User id is the `sub` claim. |
+| `MONGODB_URI` / `MONGODB_DB` | — / `mfchat` | Where chats and usage are stored. Required in production; empty = in-memory (dev/tests only). |
+| `USAGE_LIMIT_TOKENS` / `USAGE_WINDOW_HOURS` | `0` / `24` | Per-user token budget per window. `0` records usage without ever blocking. |
+| `SERVICE_API_KEY` | — | Enables the [server-to-server API](docs/server-to-server-api.md) (`/internal/…`, header `X-Api-Key`), ≥ 16 chars. |
 | `ALLOWED_ORIGINS` | — | Your site's origin(s), comma-separated. |
 | `ALLOW_ANONYMOUS` | `false` | Let logged-out visitors chat. |
-| `PORTFOLIO_SOURCE` | `none` | `none`, `demo` or `mysql` (see below). |
+| `PORTFOLIO_SOURCE` | `none` | `none` (off) or `demo` (built-in sample holdings). No external database. |
 | `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_IP_PER_MINUTE` | `20` / `60` | Per user and per IP. |
 | `AGENT_MAX_STEPS`, `TOOL_TIMEOUT_MS`, `HISTORY_MAX_TURNS` | `8`, `45000`, `12` | Agent limits. |
 | `APP_NAME`, `ASSISTANT_NAME` | `MF Invest`, `Fundy` | Used in the system prompt. |
 | `ENABLE_PLAYGROUND` / `PLAYGROUND_PASSWORD` | — | Test page at `/playground`; the optional password adds a browser login. Turn it off before launch. |
-| `REDIS_URL` / Upstash `KV_*`, `UPSTASH_REDIS_REST_*` | — | Any of these switches chat memory to Redis automatically (`/health` shows the active store). |
 
 More MCP servers can be added in `agent-service/mcp.config.json`: their tools are merged automatically.
 
-## "My portfolio" from your Laravel database
+## "My portfolio" questions
 
-The Node service reads holdings directly and read-only; Laravel needs no changes. Create a MySQL user
-with `SELECT` only, then set:
+Set `PORTFOLIO_SOURCE=demo` to give every signed-in user a built-in sample portfolio, so you can try
+"How is my portfolio doing?" without any external data. `none` turns the feature off.
 
-```env
-PORTFOLIO_SOURCE=mysql
-PORTFOLIO_DB_URL=mysql://mfchat_readonly:secret@127.0.0.1:3306/your_laravel_db
-PORTFOLIO_HOLDINGS_SQL="SELECT scheme_code, units, invested_amount FROM holdings WHERE user_id = :user_id AND units > 0"
-# optional, enables XIRR:
-PORTFOLIO_TRANSACTIONS_SQL="SELECT scheme_code, DATE(created_at) AS date, IF(type = 'redeem', -amount, amount) AS amount FROM transactions WHERE user_id = :user_id"
-```
-
-Adjust the table and column names to your schema; the queries just need to return those column
-aliases. `:user_id` is the id from the signed token (`auth()->id()`). Guests never get portfolio
-access, and only single `SELECT` statements are accepted.
+This service holds no live holdings of its own — it does not connect to any external application
+database. To feed real holdings, implement a `PortfolioProvider` in
+`agent-service/src/portfolio/providers.ts` (`getHoldings(userId)` returning `scheme_code`, `units` and
+optional `invested_amount` / `transactions`) that reads from your own source, and wire it into
+`createPortfolioProvider`. Holdings are keyed by the verified user id; guests never get portfolio access.
 
 ## Security model
 
-- **Identity:** Laravel signs `{uid, name, exp}` with HMAC-SHA256 (12-hour expiry). The Node service
-  verifies it with a timing-safe compare. Conversations are keyed by the verified user id, so users
-  can't read each other's chats, and the model never chooses whose portfolio to load.
+- **Identity:** the website signs a standard JWT (HS256) with `{sub, name?, risk?, exp}`. The Node
+  service verifies it with the shared secret — algorithm pinned to HS256 (no `alg: none` / confusion),
+  timing-safe compare, expiry checked. Chats and usage are stored in MongoDB keyed by the verified user
+  id, so users can't read each other's chats, and the model never chooses whose portfolio to load.
+- **Server-to-server:** the `/internal` read API is gated by a separate shared `SERVICE_API_KEY`
+  (`X-Api-Key`) and is never exposed to the browser.
 - **Browser access:** only the origins in `ALLOWED_ORIGINS` (CORS), JSON bodies capped at 32 KB,
   per-user and per-IP rate limits, and client disconnects cancel the Gemini and tool calls.
 - **Widget:** markdown is sanitised with DOMPurify, and the UI is isolated in a Shadow DOM.
@@ -175,19 +175,19 @@ The same code deploys to Vercel or to a VPS; the host decides how it runs, and n
 | --- | --- | --- |
 | Entry point | `api/index.js` → one Function | `npm start` / PM2 → two processes |
 | MCP data server | in-process | separate process over HTTP (`mcp.config.json`) |
-| Chat memory | Vercel Runtime Cache, or Upstash Redis (added from the Storage tab) | in-memory, or Redis via `REDIS_URL` |
+| Chats & usage | MongoDB via `MONGODB_URI` (e.g. Atlas) | MongoDB via `MONGODB_URI` (Atlas or self-hosted) |
 | `embed.js` | Vercel CDN | served by Express |
 | Config | Vercel environment variables | `agent-service/.env`, `mcp-server/.env` |
 
 Serve it from your own domain (`chat.yourdomain.com`) from day one; moving hosts is then only a DNS change,
 and Laravel keeps the same `MF_CHAT_URL`.
 
-**Docker:** `docker compose up --build` runs the MCP server, agent and Redis (see `docker-compose.yml`).
+**Docker:** `docker compose up --build` runs the MCP server, agent and MongoDB (see `docker-compose.yml`).
 
 ## Development
 
 ```bash
-npm test            # 22 MCP tests (analytics maths + HTTP transport) + 14 agent tests (fake Gemini, real MCP, HTTP/SSE, auth)
+npm test            # 22 MCP tests (analytics maths + HTTP transport) + 31 agent tests (fake Gemini, real MCP, HTTP/SSE, JWT auth, store, usage, S2S API)
 npm run smoke       # calls all 14 MCP tools against live AMFI data
 npm run typecheck
 ```

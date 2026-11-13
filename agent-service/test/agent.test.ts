@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { createHmac } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { Content, GenerateContentParameters, GenerateContentResponse, Part } from '@google/genai';
 import { pino } from 'pino';
@@ -13,15 +13,13 @@ import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/http/app.js';
 import { McpHub } from '../src/mcp/hub.js';
 import { DemoPortfolioProvider } from '../src/portfolio/providers.js';
-import {
-  createConversationStore,
-  MemoryStore,
-  resolveStore,
-  UpstashStore,
-  VercelRuntimeCacheStore,
-} from '../src/store/conversations.js';
+import { conversationKey, createConversationStore, MemoryStore } from '../src/store/conversations.js';
+import { MemoryUsageService } from '../src/usage/usage.js';
 
 const log = pino({ level: 'silent' });
+
+/** No-limit usage service: records tokens but never blocks (quota enforcement has its own tests). */
+const usage = () => new MemoryUsageService(0, 24 * 3_600_000);
 
 type Step = (params: GenerateContentParameters) => Part[] | Error;
 
@@ -384,68 +382,46 @@ describe('deployment building blocks (Vercel / VPS)', () => {
     await inproc.close();
   }, 60_000);
 
-  it('stores conversations in a Vercel Runtime Cache with a TTL and no user id in the entry name', async () => {
-    const calls: { key: string; options?: { ttl?: number; name?: string } }[] = [];
-    const data = new Map<string, unknown>();
-    const fakeCache = {
-      get: async (key: string) => data.get(key) ?? null,
-      set: async (key: string, value: unknown, options?: { ttl?: number; name?: string }) => {
-        calls.push({ key, options });
-        data.set(key, structuredClone(value));
-      },
-      delete: async (key: string) => void data.delete(key),
-    };
-    const store = new VercelRuntimeCacheStore(fakeCache, 86_400);
-    const record = { id: 'c1', userId: '42', contents: [], transcript: [], createdAt: 'x', updatedAt: 'x' };
-    expect(await store.get('k')).toBeNull();
-    await store.set('k', record);
-    expect(await store.get('k')).toEqual(record);
-    expect(calls[0].options).toEqual({ ttl: 86_400, name: 'conversation' });
-    await store.delete('k');
-    expect(await store.get('k')).toBeNull();
+  it('stores, reads and lists conversations in the in-memory fallback', async () => {
+    const store = new MemoryStore(60_000);
+    const record = (id: string, userId: string, text: string) => ({
+      id,
+      userId,
+      contents: [],
+      transcript: [{ role: 'user' as const, text, at: '2026-01-01T00:00:00Z' }],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: `2026-01-0${id.at(-1)}T00:00:00Z`,
+    });
+    await store.set(conversationKey('42', 'conv0001'), record('conv0001', '42', 'first'));
+    await store.set(conversationKey('42', 'conv0002'), record('conv0002', '42', 'second'));
+    await store.set(conversationKey('99', 'conv0003'), record('conv0003', '99', 'other user'));
+
+    expect((await store.get(conversationKey('42', 'conv0001')))?.transcript[0].text).toBe('first');
+    const page = await store.list('42', { limit: 10 });
+    expect(page.conversations.map((c) => c.conversation_id)).toEqual(['conv0002', 'conv0001']); // newest first, other user excluded
+    expect(page.conversations[0]).toMatchObject({ title: 'second', updated_at: '2026-01-02T00:00:00Z' });
+
+    await store.delete(conversationKey('42', 'conv0001'));
+    expect(await store.get(conversationKey('42', 'conv0001'))).toBeNull();
   });
 
-  it('stores conversations in Upstash Redis (REST) with a TTL', async () => {
-    const data = new Map<string, unknown>();
-    const setCalls: unknown[] = [];
-    const fake = {
-      get: async <T>(key: string) => (data.get(key) as T) ?? null,
-      set: async (key: string, value: unknown, opts: { ex: number }) => {
-        setCalls.push(opts);
-        data.set(key, structuredClone(value));
-        return 'OK';
-      },
-      del: async (key: string) => Number(data.delete(key)),
-    };
-    const store = new UpstashStore(fake, 3600);
-    const record = { id: 'c1', userId: '42', contents: [], transcript: [], createdAt: 'x', updatedAt: 'x' };
-    await store.set('k', record);
-    expect(await store.get('k')).toEqual(record);
-    expect(setCalls[0]).toEqual({ ex: 3600 });
-    await store.delete('k');
-    expect(await store.get('k')).toBeNull();
-    expect(store.kind).toBe('upstash');
+  it('records token usage per window and blocks only once a limit is spent', async () => {
+    const unlimited = new MemoryUsageService(0, 3_600_000);
+    await unlimited.record('u', 500);
+    expect(await unlimited.check('u')).toMatchObject({ used: 500, limit: 0, remaining: null, blocked: false, lifetime_tokens: 500, messages: 1 });
+
+    const limited = new MemoryUsageService(1000, 3_600_000);
+    await limited.record('u', 400);
+    expect(await limited.check('u')).toMatchObject({ used: 400, remaining: 600, blocked: false });
+    await limited.record('u', 700);
+    expect(await limited.check('u')).toMatchObject({ used: 1100, remaining: 0, blocked: true });
   });
 
-  it('detects every Redis variable name the Vercel ⇄ Upstash integration may add', () => {
-    const base = { GEMINI_API_KEY: 'x', ALLOW_ANONYMOUS: 'true', VERCEL: '1' };
-    const kind = (env: Record<string, string>) => resolveStore(loadConfig({ ...base, ...env })).kind;
-    expect(kind({})).toBe('vercel');
-    expect(kind({ KV_REST_API_URL: 'https://x.upstash.io', KV_REST_API_TOKEN: 't' })).toBe('upstash');
-    expect(kind({ UPSTASH_REDIS_REST_URL: 'https://x.upstash.io', UPSTASH_REDIS_REST_TOKEN: 't' })).toBe('upstash');
-    expect(kind({ KV_URL: 'rediss://default:p@x.upstash.io:6379' })).toBe('redis');
-    expect(kind({ REDIS_URL: 'redis://127.0.0.1:6379' })).toBe('redis');
-    expect(kind({ REDIS_URL: '' })).toBe('vercel'); // empty value from a copied .env.example
-    expect(resolveStore(loadConfig({ ...base, KV_URL: 'rediss://k' })).redisUrl).toBe('rediss://k');
-  });
-
-  it('allows a public playground in production, except alongside real portfolio data', () => {
-    const base = { GEMINI_API_KEY: 'x', ALLOW_ANONYMOUS: 'true', VERCEL: '1', VERCEL_ENV: 'production', ENABLE_PLAYGROUND: 'true' };
+  it('allows a public playground in production', () => {
+    const base = { GEMINI_API_KEY: 'x', ALLOW_ANONYMOUS: 'true', MONGODB_URI: 'mongodb://localhost:27017', VERCEL: '1', VERCEL_ENV: 'production', ENABLE_PLAYGROUND: 'true' };
     expect(loadConfig(base).ENABLE_PLAYGROUND).toBe(true);
     expect(loadConfig({ ...base, PORTFOLIO_SOURCE: 'demo' }).ENABLE_PLAYGROUND).toBe(true);
-    const mysql = { ...base, PORTFOLIO_SOURCE: 'mysql' };
-    expect(() => loadConfig(mysql)).toThrow(/any user's portfolio/);
-    expect(loadConfig({ ...mysql, PLAYGROUND_PASSWORD: 'long-enough-password' }).ENABLE_PLAYGROUND).toBe(true);
+    expect(loadConfig({ ...base, PLAYGROUND_PASSWORD: 'long-enough-password' }).ENABLE_PLAYGROUND).toBe(true);
     expect(() => loadConfig({ ...base, PLAYGROUND_PASSWORD: 'short' })).toThrow(/12 characters/);
   });
 
@@ -453,13 +429,14 @@ describe('deployment building blocks (Vercel / VPS)', () => {
     const pgConfig = loadConfig({
       GEMINI_API_KEY: 'x',
       WIDGET_TOKEN_SECRET: SECRET,
+      MONGODB_URI: 'mongodb://localhost:27017',
       VERCEL: '1',
       VERCEL_ENV: 'production',
       ENABLE_PLAYGROUND: 'true',
     });
     const store = new MemoryStore(60_000);
-    const agent = new MfAgent({ model: new FakeModel([]), hub, store, config: pgConfig, log });
-    const server = createApp({ agent, hub, store, config: pgConfig, log }).listen(0);
+    const agent = new MfAgent({ model: new FakeModel([]), hub, store, usage: usage(), config: pgConfig, log });
+    const server = createApp({ agent, hub, store, usage: usage(), config: pgConfig, log }).listen(0);
     await new Promise((r) => server.once('listening', r));
     const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     try {
@@ -475,14 +452,15 @@ describe('deployment building blocks (Vercel / VPS)', () => {
     const pgConfig = loadConfig({
       GEMINI_API_KEY: 'x',
       WIDGET_TOKEN_SECRET: SECRET,
+      MONGODB_URI: 'mongodb://localhost:27017',
       VERCEL: '1',
       VERCEL_ENV: 'production',
       ENABLE_PLAYGROUND: 'true',
       PLAYGROUND_PASSWORD: 'long-enough-password',
     });
     const store = new MemoryStore(60_000);
-    const agent = new MfAgent({ model: new FakeModel([]), hub, store, config: pgConfig, log });
-    const server = createApp({ agent, hub, store, config: pgConfig, log }).listen(0);
+    const agent = new MfAgent({ model: new FakeModel([]), hub, store, usage: usage(), config: pgConfig, log });
+    const server = createApp({ agent, hub, store, usage: usage(), config: pgConfig, log }).listen(0);
     await new Promise((r) => server.once('listening', r));
     const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const basic = (pw: string) => ({ Authorization: `Basic ${Buffer.from(`me:${pw}`).toString('base64')}` });
@@ -501,43 +479,39 @@ describe('deployment building blocks (Vercel / VPS)', () => {
     }
   });
 
-  it('picks the conversation store from the environment', async () => {
+  it('uses the in-memory store only when MongoDB is not configured', async () => {
     const base = { GEMINI_API_KEY: 'x', ALLOW_ANONYMOUS: 'true' };
     expect(await createConversationStore(loadConfig(base), log)).toBeInstanceOf(MemoryStore);
-    expect(await createConversationStore(loadConfig({ ...base, VERCEL: '1' }), log)).toBeInstanceOf(VercelRuntimeCacheStore);
-    expect(await createConversationStore(loadConfig({ ...base, VERCEL: '1', CONVERSATION_STORE: 'memory' }), log)).toBeInstanceOf(MemoryStore);
     // On Vercel, client IPs come from X-Forwarded-For.
     expect(loadConfig({ ...base, VERCEL: '1' }).TRUST_PROXY).toBe('true');
+    // Production refuses to start without MongoDB (would silently lose chats on restart).
+    expect(() => loadConfig({ ...base, VERCEL_ENV: 'production' })).toThrow(/MONGODB_URI/);
   });
 });
 
-describe('user tokens', () => {
-  it('round-trips and rejects tampering / expiry', () => {
+describe('user tokens (JWT, HS256)', () => {
+  it('round-trips and rejects tampering, bad algorithm and expiry', () => {
     const token = signUserToken({ uid: '42', name: 'Asha', exp: Math.floor(Date.now() / 1000) + 60 }, SECRET);
     expect(verifyUserToken(token, SECRET)).toEqual({ ok: true, claims: { uid: '42', name: 'Asha', exp: expect.any(Number) } });
 
-    const [payload, sig] = token.split('.');
-    const forged = Buffer.from(JSON.stringify({ uid: '1', exp: 9999999999 })).toString('base64url');
-    expect(verifyUserToken(`${forged}.${sig}`, SECRET)).toEqual({ ok: false, reason: 'bad_signature' });
-    expect(verifyUserToken(`${payload}.${sig}`, 'another-secret-another-secret-another')).toMatchObject({ ok: false });
+    const [header, payload, sig] = token.split('.');
+    const forged = Buffer.from(JSON.stringify({ sub: '1', exp: 9999999999 })).toString('base64url');
+    expect(verifyUserToken(`${header}.${forged}.${sig}`, SECRET)).toEqual({ ok: false, reason: 'bad_signature' });
+    expect(verifyUserToken(token, 'another-secret-another-secret-another')).toMatchObject({ ok: false, reason: 'bad_signature' });
     expect(verifyUserToken(signUserToken({ uid: '42', exp: 1 }, SECRET), SECRET)).toEqual({ ok: false, reason: 'expired' });
     expect(verifyUserToken('garbage', SECRET)).toEqual({ ok: false, reason: 'malformed' });
+
+    // "alg: none" (and any non-HS256 header) is rejected even when the rest of the token looks valid.
+    const noneHeader = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+    expect(verifyUserToken(`${noneHeader}.${payload}.`, SECRET)).toMatchObject({ ok: false });
   });
 
-  it('accepts a token minted by the PHP code used in the Blade snippet', () => {
-    const php = [
-      '$secret = $argv[1];',
-      "$payload = rtrim(strtr(base64_encode(json_encode(['uid' => (string) 42, 'name' => 'Ásha Rao', 'exp' => time() + 43200])), '+/', '-_'), '=');",
-      "echo $payload.'.'.hash_hmac('sha256', $payload, $secret);",
-    ].join(' ');
-    let token: string;
-    try {
-      token = execFileSync('php', ['-r', php, SECRET], { encoding: 'utf8' });
-    } catch {
-      console.warn('php not available; skipping PHP compatibility check');
-      return;
-    }
-    expect(verifyUserToken(token.trim(), SECRET)).toMatchObject({ ok: true, claims: { uid: '42', name: 'Ásha Rao' } });
+  it('accepts a standard HS256 JWT minted by another server (numeric sub)', () => {
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({ sub: 42, name: 'Ásha Rao', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
+    const signingInput = `${header}.${payload}`;
+    const signature = createHmac('sha256', SECRET).update(signingInput).digest('base64url');
+    expect(verifyUserToken(`${signingInput}.${signature}`, SECRET)).toMatchObject({ ok: true, claims: { uid: '42', name: 'Ásha Rao' } });
   });
 });
 
@@ -550,8 +524,8 @@ describe('HTTP API', () => {
 
   beforeAll(async () => {
     const store = new MemoryStore(60_000);
-    const agent = new MfAgent({ model, hub, store, config, log });
-    const server = createApp({ agent, hub, store, config, log }).listen(0);
+    const agent = new MfAgent({ model, hub, store, usage: usage(), config, log });
+    const server = createApp({ agent, hub, store, usage: usage(), config, log }).listen(0);
     await new Promise((r) => server.once('listening', r));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     close = () => server.close();
@@ -653,5 +627,57 @@ describe('HTTP API', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('javascript');
     expect(await res.text()).toContain('MfChat');
+  });
+});
+
+describe('server-to-server API', () => {
+  const KEY = 'service-key-at-least-16-chars';
+  const store = new MemoryStore(60_000);
+  const usageSvc = new MemoryUsageService(0, 3_600_000);
+  const s2sConfig = loadConfig({ GEMINI_API_KEY: 'x', WIDGET_TOKEN_SECRET: SECRET, SERVICE_API_KEY: KEY });
+  let base: string;
+  let close: () => void;
+
+  beforeAll(async () => {
+    const agent = new MfAgent({ model: new FakeModel([]), hub, store, usage: usageSvc, config: s2sConfig, log });
+    const server = createApp({ agent, hub, store, usage: usageSvc, config: s2sConfig, log }).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    close = () => server.close();
+
+    await store.set(conversationKey('42', 'conv0001'), {
+      id: 'conv0001',
+      userId: '42',
+      contents: [],
+      transcript: [
+        { role: 'user', text: 'How did my SIP do?', at: '2026-01-01T00:00:00Z' },
+        { role: 'assistant', text: 'Up 12%.', at: '2026-01-01T00:00:05Z' },
+      ],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:05Z',
+    });
+    await usageSvc.record('42', 1500);
+  });
+  afterAll(() => close());
+
+  const get = (path: string, headers: Record<string, string> = { 'X-Api-Key': KEY }) => fetch(base + path, { headers });
+
+  it('rejects calls without the right service key', async () => {
+    expect((await get('/internal/users/42/conversations', {})).status).toBe(401);
+    expect((await get('/internal/users/42/conversations', { 'X-Api-Key': 'wrong-key-wrong-key-xx' })).status).toBe(401);
+  });
+
+  it("lists a user's conversations, returns one, and reports usage", async () => {
+    const list = (await (await get('/internal/users/42/conversations')).json()) as { conversations: { conversation_id: string; title: string }[] };
+    expect(list.conversations[0]).toMatchObject({ conversation_id: 'conv0001', title: 'How did my SIP do?' });
+
+    const conv = (await (await get('/internal/users/42/conversations/conv0001')).json()) as { messages: { text: string }[] };
+    expect(conv.messages.map((m) => m.text)).toEqual(['How did my SIP do?', 'Up 12%.']);
+
+    expect((await get('/internal/users/42/conversations/short')).status).toBe(422); // id too short
+    expect((await get('/internal/users/7/conversations/conv0001')).status).toBe(404); // another user's chat
+
+    const u = (await (await get('/internal/users/42/usage')).json()) as { lifetime_tokens: number; messages: number };
+    expect(u).toMatchObject({ lifetime_tokens: 1500, messages: 1 });
   });
 });

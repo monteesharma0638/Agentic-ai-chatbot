@@ -15,7 +15,7 @@ What you'll end up with:
 Laravel page ──HTTPS──▶ chat.yourdomain.com  (Vercel)
                           ├─ /embed.js  → CDN (static file)
                           └─ everything else → one Function: Gemini agent + MCP server (in-process)
-                                                chat memory → Vercel Runtime Cache (or Redis)
+                                                chats & usage → MongoDB (Atlas)
 ```
 
 **Time:** about 20 minutes. **Cost:** covered by your Pro plan for normal traffic. The function mostly
@@ -62,15 +62,18 @@ never committed) has them ready to import: **Settings → Environment Variables 
 | Variable | Value |
 | --- | --- |
 | `GEMINI_API_KEY` | your Gemini key |
-| `WIDGET_TOKEN_SECRET` | the generated secret. Laravel's `MF_CHAT_SECRET` must be identical |
+| `WIDGET_TOKEN_SECRET` | the generated secret used to verify your website's JWT. The signing secret on your site must be identical |
+| `MONGODB_URI` | your MongoDB Atlas connection string (see step 8) |
 | `ALLOWED_ORIGINS` | `https://your-laravel-site.com`. Exact, no trailing slash. Add `,https://www.your-laravel-site.com` if you use www |
 | `APP_NAME` | your app's name, e.g. `MyFunds` |
 | `ASSISTANT_NAME` | the assistant's name, e.g. `Fundy` |
 | `PORTFOLIO_SOURCE` | `none` for now (see step 9) |
 | `ENABLE_PLAYGROUND` | `true` while testing: a public test page at `/playground` (see "Using the playground"). Set `false` before launch |
 
-Optional: `PLAYGROUND_PASSWORD` (12+ characters; puts a browser login on the playground), `ALLOW_ANONYMOUS=true` (let logged-out visitors chat), `GEMINI_MODEL` / `GEMINI_FALLBACK_MODELS`,
-`LOG_LEVEL`. Redis variables are added by the Upstash integration (step 8); don't type them yourself.
+Optional: `MONGODB_DB` (default `mfchat`), `SERVICE_API_KEY` (enables the server-to-server read API),
+`USAGE_LIMIT_TOKENS` / `USAGE_WINDOW_HOURS` (per-user token budget), `PLAYGROUND_PASSWORD` (12+ characters;
+puts a browser login on the playground), `ALLOW_ANONYMOUS=true` (let logged-out visitors chat),
+`GEMINI_MODEL` / `GEMINI_FALLBACK_MODELS`, `LOG_LEVEL`.
 
 **Don't set these on Vercel:**
 - `NODE_ENV`: setting it to `production` makes npm skip the build tools and the build fails. The app
@@ -126,37 +129,28 @@ Project → **Firewall** → **Configure** → **New Rule** (names may differ sl
 Leave **Deployment Protection** at the default (**Standard Protection**), which locks preview URLs behind your
 Vercel login. Production must stay public, because your Laravel visitors' browsers call it.
 
-## 8. Chat memory that's never evicted: Redis (recommended)
+## 8. Storage: MongoDB (required)
 
-Without Redis, conversations are kept in **Vercel Runtime Cache**: shared by all instances, 24-hour expiry,
-nothing to set up, but it can drop old entries when full. Redis keeps every chat for its full 24 hours.
+Chats and token usage are stored in **MongoDB**, keyed by user id. This is required — production refuses
+to start without it (an in-memory fallback exists only for local dev and is lost on every restart).
 
-1. Project → **Storage** → **Create Database** (or **Browse Marketplace**) → choose **Upstash** → **Redis**.
-2. **Region:** pick **Mumbai (ap-south-1)** if offered, to sit next to the function (`bom1`). The free plan is
-   plenty to start with.
-3. **Connect** it to this project with **all environments** ticked (Production, Preview, Development).
-   Upstash adds its variables automatically, for example `KV_REST_API_URL` / `KV_REST_API_TOKEN` or
-   `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`, sometimes also `KV_URL` / `REDIS_URL`. The app detects
-   any of them, so you don't need to rename or copy anything.
+1. Create a free cluster on **MongoDB Atlas** (pick a region near the function, e.g. Mumbai `ap-south-1`).
+2. **Network Access:** allow connections from Vercel (Atlas → Network Access → add `0.0.0.0/0`, or Vercel's
+   egress IPs if you have them). **Database Access:** create a user with read/write on the database.
+3. In Vercel → **Settings → Environment Variables**, add for **all environments**:
+   - `MONGODB_URI` = your Atlas connection string (`mongodb+srv://user:pass@cluster.../`)
+   - `MONGODB_DB` = `mfchat` (optional; this is the default)
 4. **Redeploy** (Deployments → ⋯ → Redeploy); new variables only apply to new deployments.
-5. Check `https://chat.yourdomain.com/health`: it should now say `"store":"upstash"` (or `"redis"`).
+5. Check `https://chat.yourdomain.com/health`: it should say `"store":"mongo"`.
 
-Production and Preview then share this Redis database. Chats never mix between them because every entry is
-keyed by user and conversation id. If you'd rather keep them apart, create a second database and connect it
-to Preview only.
+Production and Preview can share one cluster (use a different `MONGODB_DB` per environment to keep them
+apart). Chats never mix between users because every document is keyed by user and conversation id.
 
-## 9. "My portfolio" answers: best left for the VPS
+## 9. "My portfolio" answers
 
-Vercel functions don't have a fixed IP address, so your Laravel MySQL database would have to accept
-connections from the whole internet (with TLS, a strong password and a read-only user), or you'd need Vercel's
-paid **Static IPs** feature so the database can allow only those addresses.
-
-- **For now:** keep `PORTFOLIO_SOURCE=none`, or use `demo` to show sample holdings.
-- **On a VPS later:** it has a fixed IP, so follow step 11 of [deploy-vps.md](deploy-vps.md).
-
-If you still want it on Vercel, set the `PORTFOLIO_*` variables exactly as described in
-[deploy-vps.md, step 11](deploy-vps.md#11-optional-how-is-my-portfolio-doing-from-your-laravel-database), and add
-`?ssl={"rejectUnauthorized":true}` to `PORTFOLIO_DB_URL`.
+This service doesn't connect to any external application database. Set `PORTFOLIO_SOURCE=demo` to show a
+built-in sample portfolio, or `none` to turn the feature off. To serve real holdings, add your own
+`PortfolioProvider` in `agent-service/src/portfolio/providers.ts` (see the README's "My portfolio" section).
 
 ## Using the playground
 
@@ -173,8 +167,6 @@ You can chat there without Laravel. It works on preview URLs too; Vercel asks fo
 - **It's public:** anyone who finds the URL can chat (using your Gemini quota) and create test logins for any
   user id. That's fine while only a few testers know the URL. Before launch, set `ENABLE_PLAYGROUND=false`,
   or add `PLAYGROUND_PASSWORD` to put a login in front of it. The logs warn about this on every start.
-- It won't start together with `PORTFOLIO_SOURCE=mysql` unless `PLAYGROUND_PASSWORD` is set; otherwise
-  anyone could view any user's real holdings.
 
 ## Updating
 
@@ -206,9 +198,9 @@ Laravel keeps using `https://chat.yourdomain.com` and needs no changes.
 | --- | --- |
 | Build fails at `tsc` or `esbuild: not found` | `NODE_ENV=production` is set in Vercel; remove it. |
 | `/health` shows `startup_failed` | A required variable is missing. See **Logs** for the exact message. |
-| `startup_failed` right after enabling the playground | `PLAYGROUND_PASSWORD` is shorter than 12 characters, or the playground is on without a password while `PORTFOLIO_SOURCE=mysql`. |
-| `/health` still shows `"store":"vercel"` after adding Upstash | Redeploy; variables only reach new deployments. Check that Upstash is connected to that environment. |
-| Widget shows "Your session has expired" | Laravel `MF_CHAT_SECRET` ≠ Vercel `WIDGET_TOKEN_SECRET`. Fix, redeploy, `php artisan config:clear`. |
+| `startup_failed` right after enabling the playground | `PLAYGROUND_PASSWORD` is set but shorter than 12 characters. |
+| `/health` doesn't show `"store":"mongo"`, or `startup_failed` mentions `MONGODB_URI` | `MONGODB_URI` is missing or unreachable. Check the value, the Atlas user, and that Network Access allows Vercel. Redeploy — variables only reach new deployments. |
+| Widget shows "Your session has expired" | The JWT signing secret on your site ≠ Vercel `WIDGET_TOKEN_SECRET`. Fix, redeploy, clear the site's config cache. |
 | Browser console: `403` / `origin_not_allowed` | `ALLOWED_ORIGINS` doesn't exactly match the Laravel site address (https, www, no trailing slash). Redeploy after changing it. |
 | Widget can't load, or requests fail on a preview URL | Preview URLs are login-protected; use the production domain from Laravel. |
 | First answer after a quiet period is slower | A new function instance is downloading the AMFI fund list (a second or two); later answers are fast. |

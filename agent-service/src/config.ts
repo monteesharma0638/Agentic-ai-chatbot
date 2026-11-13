@@ -33,6 +33,9 @@ const EnvSchema = z.object({
   /** Express "trust proxy" setting; set to 1 behind nginx / a load balancer so client IPs are correct. */
   TRUST_PROXY: z.string().default('loopback'),
 
+  /** Service key the other server sends (header X-Api-Key) to read conversations/usage. Min 16 chars. */
+  SERVICE_API_KEY: z.string().optional(),
+
   /** Set automatically by Vercel ("1") and its environment name (production / preview / development). */
   VERCEL: bool,
   VERCEL_ENV: z.string().optional(),
@@ -57,19 +60,17 @@ const EnvSchema = z.object({
   MCP_SERVERS: z.string().optional(),
 
   /**
-   * auto = Upstash Redis (REST) if its credentials are set, else Redis over TCP if REDIS_URL / KV_URL is set,
-   * else Vercel Runtime Cache on Vercel, otherwise in-memory.
+   * MongoDB holds all chats and token usage, keyed by the user id from the JWT.
+   * Required in production; when unset (local dev / tests) the service falls back to an in-memory store.
    */
-  CONVERSATION_STORE: z.enum(['auto', 'memory', 'redis', 'upstash', 'vercel']).default('auto'),
-  /** Redis over TCP, e.g. redis://127.0.0.1:6379 (VPS) or rediss://… (Upstash). */
-  REDIS_URL: z.string().optional(),
-  /** Names the Vercel ⇄ Upstash integration may add; picked up automatically. */
-  KV_URL: z.string().optional(),
-  KV_REST_API_URL: z.string().optional(),
-  KV_REST_API_TOKEN: z.string().optional(),
-  UPSTASH_REDIS_REST_URL: z.string().optional(),
-  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
-  CONVERSATION_TTL_HOURS: z.coerce.number().default(24),
+  MONGODB_URI: z.string().optional(),
+  MONGODB_DB: z.string().default('mfchat'),
+
+  /** Per-user AI token budget per window. 0 (default) = no limit. */
+  USAGE_LIMIT_TOKENS: z.coerce.number().int().min(0).default(0),
+  /** Rolling window the budget resets over, in hours. */
+  USAGE_WINDOW_HOURS: z.coerce.number().min(1).default(24),
+
   /** Past user turns sent to the model. Older turns are dropped. */
   HISTORY_MAX_TURNS: z.coerce.number().int().default(12),
   /** Recent turns that keep full tool call/response detail; older turns keep text only. */
@@ -90,11 +91,8 @@ const EnvSchema = z.object({
   /** Protects /playground and /dev/token with a browser login (any username). Required in production. */
   PLAYGROUND_PASSWORD: z.string().optional(),
 
-  /** none | demo | mysql — source of the signed-in user's holdings for "my portfolio" questions. */
-  PORTFOLIO_SOURCE: z.enum(['none', 'demo', 'mysql']).default('none'),
-  PORTFOLIO_DB_URL: z.string().optional(),
-  PORTFOLIO_HOLDINGS_SQL: z.string().optional(),
-  PORTFOLIO_TRANSACTIONS_SQL: z.string().optional(),
+  /** none | demo — source of the signed-in user's holdings for "my portfolio" questions. */
+  PORTFOLIO_SOURCE: z.enum(['none', 'demo']).default('none'),
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;
@@ -129,12 +127,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cfg.PLAYGROUND_PASSWORD !== undefined && cfg.PLAYGROUND_PASSWORD.length > 0 && cfg.PLAYGROUND_PASSWORD.length < 12) {
     throw new Error('PLAYGROUND_PASSWORD must be at least 12 characters.');
   }
-  // A public playground can mint a login token for any user id: never combine it with real portfolio data.
-  if (isProduction(cfg) && cfg.ENABLE_PLAYGROUND && !cfg.PLAYGROUND_PASSWORD && cfg.PORTFOLIO_SOURCE === 'mysql') {
-    throw new Error(
-      'A playground without PLAYGROUND_PASSWORD would let anyone view any user\'s portfolio. ' +
-        'Set PLAYGROUND_PASSWORD, turn the playground off, or use PORTFOLIO_SOURCE=none/demo.',
-    );
+  if (cfg.SERVICE_API_KEY !== undefined && cfg.SERVICE_API_KEY.length > 0 && cfg.SERVICE_API_KEY.length < 16) {
+    throw new Error('SERVICE_API_KEY must be at least 16 characters.');
+  }
+  // Chats and usage live in MongoDB; the in-memory fallback is lost on restart and never shared across instances.
+  if (isProduction(cfg) && !cfg.MONGODB_URI) {
+    throw new Error('Set MONGODB_URI: production must store chats and usage in MongoDB, not in memory.');
   }
   return cfg;
 }

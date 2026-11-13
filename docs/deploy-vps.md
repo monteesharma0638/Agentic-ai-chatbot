@@ -8,7 +8,8 @@ in the code needs to change when you move.
 > pointing at Vercel) into an A record pointing at the VPS. Copy your environment variables from the Vercel
 > dashboard into `agent-service/.env` (step 6). Laravel needs no changes because it keeps using
 > `https://chat.yourdomain.com`. When the VPS is live, remove the domain from the Vercel project.
-> Open conversations aren't carried over; users simply start a new chat.
+> Point `MONGODB_URI` at the same MongoDB and open conversations carry over; point it at a new database and
+> users simply start fresh.
 
 What you'll end up with:
 
@@ -37,8 +38,8 @@ Replace these placeholders everywhere below:
 Any provider works if you choose **Ubuntu 24.04 LTS**, **1–2 GB RAM**, an **India region** if available,
 and **SSH-key login**. For DigitalOcean, go to **Create → Droplets**:
 
-1. **Region:** Bangalore (BLR1). If your Laravel app or MySQL database is already on DigitalOcean,
-   pick **the same region** and the same VPC so the chat can reach the database privately.
+1. **Region:** Bangalore (BLR1). If your website or MongoDB is already on DigitalOcean,
+   pick **the same region** and the same VPC for lower latency.
 2. **Image:** Ubuntu 24.04 (LTS) x64.
 3. **Size:** Basic, Regular, **2 GB / 1 CPU ($12/mo)**. The 1 GB ($6) plan works if you add swap (step 3).
 4. **Authentication:** SSH key. Add your PC's public key. On Windows, run `ssh-keygen` in PowerShell if you
@@ -168,7 +169,8 @@ Edit `agent-service/.env` with `nano agent-service/.env` (save: Ctrl+O, Enter; e
 | --- | --- |
 | `NODE_ENV` | `production` |
 | `GEMINI_API_KEY` | your key |
-| `WIDGET_TOKEN_SECRET` | the first secret. Laravel's `MF_CHAT_SECRET` must be identical (step 12) |
+| `MONGODB_URI` | your MongoDB connection string (Atlas or self-hosted — see step 10). **Required**; production won't start without it |
+| `WIDGET_TOKEN_SECRET` | the first secret used to verify your website's JWT. The site's signing secret must be identical (step 12) |
 | `ALLOWED_ORIGINS` | `https://your-laravel-site.com`. Exact, no trailing slash. Add `,https://www.your-laravel-site.com` if you use www |
 | `ENABLE_PLAYGROUND` | `false` |
 | `MCP_AUTH_TOKEN` | the second secret |
@@ -265,47 +267,32 @@ sudo certbot renew --dry-run
 
 Check from your PC's browser: **https://chat.yourdomain.com/health** should show `"status":"ok"`.
 
-## 10. (Optional) Keep chat memory across restarts: Redis
+## 10. Storage: MongoDB (required)
 
-Without Redis, conversations live in memory and are forgotten when the service restarts (for example on
-each deploy). To keep them:
+Chats and token usage are stored in MongoDB, keyed by user id. Production won't start without
+`MONGODB_URI`, so set this up before step 8. Two options:
+
+**A. MongoDB Atlas (managed, no server to maintain).** Create a free cluster, add a database user, allow
+this Droplet's IP under Network Access, then put the connection string in `.env`:
 
 ```bash
-sudo apt install -y redis-server     # listens on 127.0.0.1 only by default
-nano ~/mf-chat/agent-service/.env    # set REDIS_URL=redis://127.0.0.1:6379
+nano ~/mf-chat/agent-service/.env    # MONGODB_URI=mongodb+srv://user:pass@cluster.../   (MONGODB_DB=mfchat optional)
 pm2 restart mf-agent
-pm2 logs mf-agent --lines 20         # look for "Conversation store: Redis"
+pm2 logs mf-agent --lines 20         # look for "MongoDB connected"
 ```
 
-## 11. (Optional) "How is my portfolio doing?" from your Laravel database
+**B. MongoDB on this Droplet.** Install from MongoDB's official apt repository (see their
+["Install on Ubuntu" guide](https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/)),
+then set `MONGODB_URI=mongodb://127.0.0.1:27017`. It binds to localhost by default — keep it that way.
 
-1. **Create a read-only MySQL user** on the Laravel database. Use `127.0.0.1` for the host if MySQL is on this
-   Droplet, the Droplet's private VPC IP if it's on another Droplet, or `YOUR_DROPLET_IP` otherwise.
+Check **https://chat.yourdomain.com/health**: it should show `"store":"mongo"`.
 
-   ```sql
-   CREATE USER 'mfchat_ro'@'YOUR_DROPLET_IP' IDENTIFIED BY 'a-long-random-password';
-   GRANT SELECT ON your_laravel_db.holdings TO 'mfchat_ro'@'YOUR_DROPLET_IP';
-   GRANT SELECT ON your_laravel_db.transactions TO 'mfchat_ro'@'YOUR_DROPLET_IP';
-   ```
+## 11. (Optional) "How is my portfolio doing?"
 
-2. **Allow the connection:**
-   - **DigitalOcean Managed MySQL:** add the Droplet under **Trusted sources**.
-   - **MySQL on another server:** allow only `YOUR_DROPLET_IP` on port 3306 in that server's firewall.
-
-3. **Configure** `agent-service/.env`. Adjust the table and column names to your schema; the queries only
-   need to return these column names.
-
-   ```env
-   PORTFOLIO_SOURCE=mysql
-   PORTFOLIO_DB_URL=mysql://mfchat_ro:a-long-random-password@DB_HOST:3306/your_laravel_db
-   PORTFOLIO_HOLDINGS_SQL="SELECT scheme_code, units, invested_amount FROM holdings WHERE user_id = :user_id AND units > 0"
-   PORTFOLIO_TRANSACTIONS_SQL="SELECT scheme_code, DATE(created_at) AS date, IF(type = 'redeem', -amount, amount) AS amount FROM transactions WHERE user_id = :user_id"
-   ```
-
-   If the database is reached over the internet, add TLS to the URL:
-   `…/your_laravel_db?ssl={"rejectUnauthorized":true}`
-
-4. `pm2 restart mf-agent`, then `pm2 logs mf-agent --lines 20` should show `Portfolio source: MySQL`.
+This service connects to no external application database. Set `PORTFOLIO_SOURCE=demo` in
+`agent-service/.env` for built-in sample holdings, or `none` to turn the feature off, then
+`pm2 restart mf-agent`. To serve real holdings, add your own `PortfolioProvider` in
+`agent-service/src/portfolio/providers.ts` (see the README's "My portfolio" section).
 
 ## 12. Connect your Laravel app
 

@@ -18,14 +18,19 @@
     $mfChatSecret = (string) config('services.mf_chat.secret');
     $mfChatToken = null;
 
-    // Signed, short-lived token proving which user is logged in (verified by the Node service).
+    // Standard JWT (HS256), short-lived, proving which user is logged in (verified by the Node service,
+    // which reads the user id from the `sub` claim). base64url with no padding, exactly as JWT requires.
     if ($mfChatSecret !== '' && auth()->check()) {
-        $mfChatPayload = rtrim(strtr(base64_encode(json_encode([
-            'uid'  => (string) auth()->id(),
+        $b64url = static fn (string $s): string => rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
+        $mfChatHeader = $b64url(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
+        $mfChatPayload = $b64url(json_encode([
+            'sub'  => (string) auth()->id(),
             'name' => \Illuminate\Support\Str::before(trim((string) (auth()->user()->name ?? '')), ' '),
+            'iat'  => time(),
             'exp'  => time() + 60 * 60 * 12,
-        ])), '+/', '-_'), '=');
-        $mfChatToken = $mfChatPayload.'.'.hash_hmac('sha256', $mfChatPayload, $mfChatSecret);
+        ]));
+        $mfChatSigningInput = $mfChatHeader.'.'.$mfChatPayload;
+        $mfChatToken = $mfChatSigningInput.'.'.$b64url(hash_hmac('sha256', $mfChatSigningInput, $mfChatSecret, true));
     }
 @endphp
 

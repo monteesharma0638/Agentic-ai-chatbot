@@ -66,11 +66,12 @@ function visitorId() {
  */
 function tokenClaims(token) {
   try {
-    const payload = token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+    // A JWT is header.payload.signature — the claims are the middle (second) segment.
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     const bytes = Uint8Array.from(atob(payload), (c) => c.charCodeAt(0));
-    const { uid, name } = JSON.parse(new TextDecoder().decode(bytes));
+    const { sub, name } = JSON.parse(new TextDecoder().decode(bytes));
     const first = typeof name === 'string' ? name.trim().split(/\s+/)[0] : '';
-    return { uid: uid ?? 'user', name: first ? first[0].toUpperCase() + first.slice(1) : '' };
+    return { uid: sub ?? 'user', name: first ? first[0].toUpperCase() + first.slice(1) : '' };
   } catch {
     return { uid: 'user', name: '' };
   }

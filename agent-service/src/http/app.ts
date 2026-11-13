@@ -10,6 +10,8 @@ import { isProduction, type AppConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import type { McpHub } from '../mcp/hub.js';
 import { conversationKey, type ConversationStore } from '../store/conversations.js';
+import type { UsageService } from '../usage/usage.js';
+import { createInternalRouter } from './internal.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = resolve(here, '../../public');
@@ -51,10 +53,11 @@ export function createApp(deps: {
   agent: MfAgent;
   hub: McpHub;
   store: ConversationStore;
+  usage: UsageService;
   config: AppConfig;
   log: Logger;
 }) {
-  const { agent, hub, store, config, log } = deps;
+  const { agent, hub, store, usage, config, log } = deps;
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', parseTrustProxy(config.TRUST_PROXY));
@@ -256,6 +259,9 @@ export function createApp(deps: {
     }
     res.sendFile(embedPath);
   });
+
+  // ---------- server-to-server API (another backend reads chats / usage) ----------
+  app.use('/internal', createInternalRouter({ store, usage, config, log }));
 
   // ---------- development playground ----------
   if (config.ENABLE_PLAYGROUND) {

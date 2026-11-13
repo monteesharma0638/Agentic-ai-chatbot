@@ -57,8 +57,8 @@ Restart the service (VPS) or redeploy (Vercel) after changing these.
   their answers later from the greeting. The answers stay in that browser and go with each message.
 - The chat is dark by default and turns light while the page's `<body>` has the class `light-theme`
   (the app's theme toggle), switching as soon as the visitor toggles.
-- A conversation continues as the visitor moves between pages, and is kept for
-  `CONVERSATION_TTL_HOURS` (24 by default) in that browser.
+- A conversation continues as the visitor moves between pages. Signed-in chats are stored in MongoDB and
+  can be reloaded later; the browser only remembers which conversation to resume.
 - If the visitor leaves the chat open and clicks to another page, it is still open there
   (same browser tab only).
 - It keeps working on sites that change pages without a full reload: Turbo, Livewire

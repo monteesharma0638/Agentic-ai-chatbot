@@ -22,14 +22,20 @@ services:
       HOST: 0.0.0.0
       PORT: '3000'
       MF_MCP_URL: http://mcp:3100/mcp
-      REDIS_URL: redis://redis:6379
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: mfchat
       ENABLE_PLAYGROUND: 'false'
       TRUST_PROXY: '1'
     ports:
       - '3000:3000'
-    depends_on: [mcp, redis]
+    depends_on: [mcp, mongo]
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
     restart: unless-stopped
+
+volumes:
+  mongo-data:

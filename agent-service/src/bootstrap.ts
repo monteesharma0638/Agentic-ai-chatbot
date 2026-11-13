@@ -2,11 +2,13 @@ import { GoogleGenAI } from '@google/genai';
 import type { Express } from 'express';
 import { MfAgent } from './agent/agent.js';
 import { loadConfig, type AppConfig } from './config.js';
+import { getMongo } from './db/mongo.js';
 import { createApp } from './http/app.js';
 import { logger } from './logger.js';
 import { loadMcpConfig, McpHub, type McpServerConfig } from './mcp/hub.js';
 import { createPortfolioProvider } from './portfolio/providers.js';
 import { createConversationStore } from './store/conversations.js';
+import { createUsageService } from './usage/usage.js';
 
 export interface AgentRuntime {
   app: Express;
@@ -31,6 +33,7 @@ export async function createAgentRuntime(opts: { defaultMcpServers?: McpServerCo
   await hub.init();
 
   const store = await createConversationStore(config, logger);
+  const usage = await createUsageService(config, logger);
   const portfolio = await createPortfolioProvider(config, logger);
 
   const genai = new GoogleGenAI({
@@ -39,14 +42,16 @@ export async function createAgentRuntime(opts: { defaultMcpServers?: McpServerCo
     httpOptions: { retryOptions: { attempts: 1 } },
   });
 
-  const agent = new MfAgent({ model: genai.models, hub, store, config, log: logger, portfolio });
-  const app = createApp({ agent, hub, store, config, log: logger });
+  const agent = new MfAgent({ model: genai.models, hub, store, usage, config, log: logger, portfolio });
+  const app = createApp({ agent, hub, store, usage, config, log: logger });
 
   return {
     app,
     config,
     async close() {
       await Promise.allSettled([hub.close(), store.close?.(), portfolio?.close?.()]);
+      // The conversation store and usage service share one MongoDB client; close it once here.
+      if (config.MONGODB_URI) await (await getMongo(config, logger)).close().catch(() => undefined);
     },
   };
 }

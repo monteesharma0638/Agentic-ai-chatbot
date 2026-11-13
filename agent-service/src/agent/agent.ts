@@ -13,6 +13,7 @@ import type { Logger } from '../logger.js';
 import type { McpHub, ToolCallResult } from '../mcp/hub.js';
 import type { PortfolioProvider } from '../portfolio/providers.js';
 import { conversationKey, type ConversationStore } from '../store/conversations.js';
+import type { UsageService } from '../usage/usage.js';
 import { compactHistory, mergeTextParts } from './history.js';
 import { LOCAL_TOOLS, type LocalToolContext } from './localTools.js';
 import { chartsFromToolResult, toolLabel } from './presentation.js';
@@ -106,6 +107,7 @@ export class MfAgent {
       config: AppConfig;
       log: Logger;
       portfolio?: PortfolioProvider | null;
+      usage?: UsageService | null;
     },
   ) {}
 
@@ -216,6 +218,19 @@ export class MfAgent {
 
     try {
       yield { type: 'meta', conversation_id: conversationId };
+
+      // Stop before the model runs if the user has spent their token budget (when a limit is configured).
+      if (this.deps.usage) {
+        const quota = await this.deps.usage.check(req.user.id);
+        if (quota.blocked) {
+          yield {
+            type: 'error',
+            code: 'quota_exceeded',
+            message: `You've used your AI quota for now. It refreshes after ${quota.reset_at}.`,
+          };
+          return;
+        }
+      }
 
       const now = new Date().toISOString();
       const record: ConversationRecord = (await store.get(key)) ?? {
@@ -383,6 +398,13 @@ export class MfAgent {
       ].slice(-MAX_TRANSCRIPT);
       record.updatedAt = at;
       await store.set(key, record);
+
+      // Record the tokens this answer used; a failure here must not sink the reply we just produced.
+      if (this.deps.usage) {
+        await this.deps.usage
+          .record(req.user.id, usage.total_tokens)
+          .catch((err: Error) => log.warn({ err: err.message, user: req.user.id }, 'usage record failed'));
+      }
 
       log.info(
         { conversation: conversationId, user: req.user.id, model: modelUsed, steps, tools: toolNames, ms: Date.now() - started, usage },
