@@ -27,7 +27,25 @@ export interface SchemeRecord {
 export interface Directory {
   schemes: SchemeRecord[];
   byCode: Map<number, SchemeRecord>;
+  /** Scheme keyed by each of its ISINs (growth/payout and reinvestment). */
+  byIsin: Map<string, SchemeRecord>;
   loadedAt: string;
+}
+
+/**
+ * Indexes schemes by ISIN (both the growth/payout and the reinvestment ISIN) so a
+ * holding coming from an external source — a CAS statement or the host app's own
+ * records — can be matched to its AMFI scheme, and therefore its live NAV and
+ * category, by ISIN alone. The first scheme to claim an ISIN wins (ISINs are unique).
+ */
+export function indexByIsin(schemes: SchemeRecord[]): Map<string, SchemeRecord> {
+  const map = new Map<string, SchemeRecord>();
+  for (const s of schemes) {
+    for (const isin of [s.isinGrowth, s.isinReinvestment]) {
+      if (isin && !map.has(isin)) map.set(isin, s);
+    }
+  }
+  return map;
 }
 
 const SECTION_RE = /^(Open Ended Schemes|Close Ended Schemes|Interval Fund Schemes)\s*\((.*)\)\s*$/;
@@ -162,6 +180,7 @@ export class AmfiDirectory {
     this.current = {
       schemes,
       byCode: new Map(schemes.map((s) => [s.code, s])),
+      byIsin: indexByIsin(schemes),
       loadedAt: new Date().toISOString(),
     };
     this.expiresAt = Date.now() + config.directoryTtlMs;

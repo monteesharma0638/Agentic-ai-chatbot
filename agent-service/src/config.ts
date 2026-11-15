@@ -90,9 +90,27 @@ const EnvSchema = z.object({
   ENABLE_PLAYGROUND: bool,
   /** Protects /playground and /dev/token with a browser login (any username). Required in production. */
   PLAYGROUND_PASSWORD: z.string().optional(),
+  /**
+   * Dev/playground only: a ready-made user JWT (e.g. a real host-app token). `/dev/token` serves it and
+   * the identity layer trusts this exact string verbatim, without a signature check, so the real host-app
+   * token can be used in the playground without putting the host's signing secret in this env. IGNORED in
+   * production — never set it there.
+   */
+  PLAYGROUND_USER_TOKEN: z.string().optional(),
 
-  /** none | demo — source of the signed-in user's holdings for "my portfolio" questions. */
-  PORTFOLIO_SOURCE: z.enum(['none', 'demo']).default('none'),
+  /** none | demo | roborupee — source of the signed-in user's holdings for "my portfolio" questions. */
+  PORTFOLIO_SOURCE: z.enum(['none', 'demo', 'roborupee']).default('none'),
+  /** Base URL of the Robo Rupee admin API that serves holdings, e.g. https://admin.roborupee.com */
+  ROBORUPEE_API_URL: z.string().url().optional(),
+  /** Path of the holdings endpoint on that API. */
+  ROBORUPEE_HOLDINGS_PATH: z.string().default('/api/holdings/get'),
+  /**
+   * Fallback bearer token for the holdings API, used only when the user's own token isn't forwarded
+   * (single-tenant testing). In production each user's own JWT is forwarded instead — leave this unset.
+   */
+  ROBORUPEE_API_TOKEN: z.string().optional(),
+  /** Timeout for a holdings API call, in ms. */
+  ROBORUPEE_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10_000),
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;
@@ -133,6 +151,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   // Chats and usage live in MongoDB; the in-memory fallback is lost on restart and never shared across instances.
   if (isProduction(cfg) && !cfg.MONGODB_URI) {
     throw new Error('Set MONGODB_URI: production must store chats and usage in MongoDB, not in memory.');
+  }
+  if (cfg.PORTFOLIO_SOURCE === 'roborupee' && !cfg.ROBORUPEE_API_URL) {
+    throw new Error('Set ROBORUPEE_API_URL when PORTFOLIO_SOURCE=roborupee (the Robo Rupee admin API base URL).');
   }
   return cfg;
 }

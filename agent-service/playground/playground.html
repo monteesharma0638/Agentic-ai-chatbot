@@ -87,8 +87,9 @@
       <aside id="settings" hidden>
         <h1>MF Agent Playground</h1>
         <p class="note">
-          This page loads the same <code>/embed.js</code> your website will. The token is minted by the dev-only
-          <code>/dev/token</code> endpoint, the same way the Blade snippet does it.
+          This page loads the same <code>/embed.js</code> your website will. The token comes from the dev-only
+          <code>/dev/token</code> endpoint — a real host-app JWT when <code>PLAYGROUND_USER_TOKEN</code> is set,
+          otherwise one minted the same way the Blade snippet does it.
         </p>
         <form method="get">
           <label for="uid">User ID</label>

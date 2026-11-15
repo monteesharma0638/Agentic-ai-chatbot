@@ -14,12 +14,22 @@
   - It turns light or dark with the page's theme toggle (body.light-theme).
   - If the chat is left open, it is still open on the next page (same browser tab).
   - Optional attributes for the <script> tag (see docs/embed-any-website.md):
-      data-token="…"            signed-in user (greets them by name, "my investments" questions)
+      data-token="…"            signed-in user: a standard HS256 JWT your server mints with
+                                WIDGET_TOKEN_SECRET (user id in the `sub` claim). Greets them by
+                                name and enables "my investments" questions.
       data-onboarding="false"   skip the quick questions before the first chat
       data-teaser="false"       no one-time hello bubble above the orb
       data-launcher-text="…"    tooltip of the orb (default "Ask" + the assistant's name)
+
+  Signed-in users
+  - Render the token into the tag on your server, e.g.:
+        <script src="https://mcp-server-ten-eta.vercel.app/embed.js" data-token="THE_JWT" defer></script>
+  - The token is safe to place in the page — it is a per-user, short-lived bearer credential, and the
+    widget only reads its public `sub`/`name` claims. Never put WIDGET_TOKEN_SECRET in this file; that
+    secret stays on your servers. The chat server re-verifies every token, so nothing here needs it.
 -->
 
 <!-- START: Robo Rupee chat (floating) -->
+<!-- Signed-in: add data-token="THE_JWT" (minted on your server); omit it for guests. -->
 <script src="https://mcp-server-ten-eta.vercel.app/embed.js" defer></script>
 <!-- END: Robo Rupee chat (floating) -->

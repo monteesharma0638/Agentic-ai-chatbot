@@ -32,7 +32,7 @@ export const LOCAL_TOOLS: LocalTool[] = [
     },
     enabled: (ctx) => ctx.portfolio !== null && !ctx.user.guest,
     async execute(_args, ctx) {
-      const holdings = await ctx.portfolio!.getHoldings(ctx.user.id);
+      const holdings = await ctx.portfolio!.getHoldings(ctx.user.id, ctx.user.token, ctx.signal);
       if (!holdings.length) {
         return { ok: true, data: { holdings: [], note: 'The user has no mutual fund holdings in the app.' }, text: '' };
       }
@@ -40,10 +40,16 @@ export const LOCAL_TOOLS: LocalTool[] = [
         'analyze_portfolio',
         {
           holdings: holdings.map((h) => ({
-            scheme_code: h.scheme_code,
+            ...(h.scheme_code !== undefined && { scheme_code: h.scheme_code }),
+            ...(h.isin && { isin: h.isin }),
             units: h.units,
             ...(h.invested_amount !== undefined && { invested_amount: h.invested_amount }),
             ...(h.transactions?.length && { transactions: h.transactions }),
+            ...(h.scheme_name && { scheme_name: h.scheme_name }),
+            ...(h.asset_class && { asset_class: h.asset_class }),
+            ...(h.current_value !== undefined && { current_value: h.current_value }),
+            ...(h.nav !== undefined && { nav: h.nav }),
+            ...(h.nav_date && { nav_date: h.nav_date }),
           })),
         },
         { signal: ctx.signal, timeoutMs: ctx.timeoutMs },

@@ -2,11 +2,20 @@ import type { Content } from '@google/genai';
 import { z } from 'zod';
 
 export interface Holding {
-  scheme_code: number;
+  /** AMFI scheme code, when known. Otherwise the holding is matched to a scheme by `isin`. */
+  scheme_code?: number;
+  /** ISIN, used to resolve the AMFI scheme (and its live NAV) when `scheme_code` is absent. */
+  isin?: string;
   units: number;
   invested_amount?: number;
   /** amount > 0 = purchase/SIP, < 0 = redemption. */
   transactions?: { date: string; amount: number }[];
+  /** Fallbacks used only when the holding can't be matched to an AMFI scheme (so it is still counted). */
+  scheme_name?: string;
+  asset_class?: string;
+  current_value?: number;
+  nav?: number;
+  nav_date?: string;
 }
 
 /** Unknown values (e.g. from an older widget) are dropped rather than failing the whole message. */
@@ -66,6 +75,10 @@ export interface ChatUser {
   name?: string;
   risk_profile?: string;
   guest: boolean;
+  /** `advisor` / `customer` etc. from the token, when present. */
+  user_type?: string;
+  /** The raw verified bearer token, forwarded to the host app's read APIs (e.g. holdings). Never for guests. */
+  token?: string;
 }
 
 export interface ChatInput {

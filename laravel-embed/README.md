@@ -90,9 +90,9 @@ comes from `ASSISTANT_NAME` in `agent-service/.env`.
 **Guests:** logged-out visitors get no token. They can chat only if `ALLOW_ANONYMOUS=true`
 in `agent-service/.env`; otherwise the widget asks them to sign in.
 
-**"My portfolio" questions:** these are answered by the Node service reading your database
-directly (read-only). See `PORTFOLIO_*` in the main README. The snippet itself never
-sends holdings.
+**"My portfolio" questions:** controlled by `PORTFOLIO_SOURCE` in `agent-service/.env`
+(`none` = off, `demo` = built-in sample holdings). There is no connection to your Laravel
+database — the snippet never sends holdings, and the Node service never reads yours.
 
 **Content-Security-Policy:** if your app sends a CSP header, allow the chat origin in
 `script-src` and `connect-src`.

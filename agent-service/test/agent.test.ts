@@ -8,11 +8,11 @@ import { compactHistory } from '../src/agent/history.js';
 import { chartsFromToolResult } from '../src/agent/presentation.js';
 import { sanitizeSchema } from '../src/agent/schema.js';
 import type { AgentEvent, Chart, ChatUser } from '../src/agent/types.js';
-import { signUserToken, verifyUserToken } from '../src/auth/userToken.js';
+import { decodeUserToken, signUserToken, verifyUserToken } from '../src/auth/userToken.js';
 import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/http/app.js';
 import { McpHub } from '../src/mcp/hub.js';
-import { DemoPortfolioProvider } from '../src/portfolio/providers.js';
+import { aggregateHoldings, DemoPortfolioProvider, RoboRupeePortfolioProvider } from '../src/portfolio/providers.js';
 import { conversationKey, createConversationStore, MemoryStore } from '../src/store/conversations.js';
 import { MemoryUsageService } from '../src/usage/usage.js';
 
@@ -479,6 +479,37 @@ describe('deployment building blocks (Vercel / VPS)', () => {
     }
   });
 
+  it('signs the playground in as a pre-loaded host-app token (trusted verbatim, dev only)', async () => {
+    // A real host-app JWT signed with a secret this service does NOT hold.
+    const hostToken = `${Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')}.${Buffer.from(
+      JSON.stringify({ user_id: { user_id: 1, user_type: 'advisor' }, exp: Math.floor(Date.now() / 1000) + 3600 }),
+    ).toString('base64url')}.not-a-real-signature`;
+    const pgConfig = loadConfig({
+      GEMINI_API_KEY: 'x',
+      WIDGET_TOKEN_SECRET: SECRET,
+      ENABLE_PLAYGROUND: 'true',
+      PLAYGROUND_USER_TOKEN: hostToken,
+    });
+    const store = new MemoryStore(60_000);
+    const agent = new MfAgent({ model: new FakeModel([]), hub, store, usage: usage(), config: pgConfig, log });
+    const server = createApp({ agent, hub, store, usage: usage(), config: pgConfig, log }).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      // /dev/token hands back the configured host token verbatim.
+      const served = (await (await fetch(`${url}/dev/token?uid=ignored`)).json()) as { token: string };
+      expect(served.token).toBe(hostToken);
+      // identify trusts that exact token (reaches the route → 404, not 401).
+      const ok = await fetch(`${url}/api/conversations/abc12345`, { headers: { Authorization: `Bearer ${hostToken}` } });
+      expect(ok.status).toBe(404);
+      // Any OTHER unsigned token is still rejected.
+      const bad = await fetch(`${url}/api/conversations/abc12345`, { headers: { Authorization: `Bearer ${hostToken}tampered` } });
+      expect(bad.status).toBe(401);
+    } finally {
+      server.close();
+    }
+  });
+
   it('uses the in-memory store only when MongoDB is not configured', async () => {
     const base = { GEMINI_API_KEY: 'x', ALLOW_ANONYMOUS: 'true' };
     expect(await createConversationStore(loadConfig(base), log)).toBeInstanceOf(MemoryStore);
@@ -512,6 +543,105 @@ describe('user tokens (JWT, HS256)', () => {
     const signingInput = `${header}.${payload}`;
     const signature = createHmac('sha256', SECRET).update(signingInput).digest('base64url');
     expect(verifyUserToken(`${signingInput}.${signature}`, SECRET)).toMatchObject({ ok: true, claims: { uid: '42', name: 'Ásha Rao' } });
+  });
+
+  it("accepts the host app's nested user_id token shape and keeps the user type", () => {
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(
+      JSON.stringify({ user_id: { user_id: 7, user_type: 'advisor' }, iss: 'roborupee.com', exp: Math.floor(Date.now() / 1000) + 3600 }),
+    ).toString('base64url');
+    const signingInput = `${header}.${payload}`;
+    const signature = createHmac('sha256', SECRET).update(signingInput).digest('base64url');
+    expect(verifyUserToken(`${signingInput}.${signature}`, SECRET)).toMatchObject({
+      ok: true,
+      claims: { uid: '7', userType: 'advisor' },
+    });
+  });
+
+  it('decodeUserToken reads claims without a signature but still enforces shape and expiry', () => {
+    const mk = (payload: object, sig = 'anything') =>
+      `${Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')}.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.${sig}`;
+    const future = Math.floor(Date.now() / 1000) + 3600;
+    // A real host-app token verifies by decode even though we don't hold its signing secret.
+    expect(decodeUserToken(mk({ user_id: { user_id: 1, user_type: 'advisor' }, exp: future }))).toMatchObject({
+      ok: true,
+      claims: { uid: '1', userType: 'advisor' },
+    });
+    expect(decodeUserToken(mk({ sub: '1', exp: 1 }))).toEqual({ ok: false, reason: 'expired' });
+    expect(decodeUserToken(mk({ exp: future }))).toEqual({ ok: false, reason: 'malformed' }); // no subject
+    expect(decodeUserToken('not-a-jwt')).toEqual({ ok: false, reason: 'malformed' });
+  });
+});
+
+describe('Robo Rupee portfolio provider', () => {
+  const roboCfg = {
+    ROBORUPEE_API_URL: 'https://admin.roborupee.com',
+    ROBORUPEE_HOLDINGS_PATH: '/api/holdings/get',
+    ROBORUPEE_API_TOKEN: undefined,
+    ROBORUPEE_TIMEOUT_MS: 5000,
+  };
+
+  it('aggregates folios of the same scheme and keeps ISIN, cost and value', () => {
+    const holdings = aggregateHoldings([
+      { scheme: 'HDFC Flexi Cap - Growth', isin: 'inf179k01608', asset_class: 'Equity', units: '100', cost_value: '1000', current_value: '1900', nav: '19', nav_date: '2026-10-27' },
+      { scheme: 'HDFC Flexi Cap - Growth', isin: 'INF179K01608', asset_class: 'Equity', units: '50', cost_value: '0', current_value: '950' },
+      { scheme: 'Some Closed Fund', isin: null, asset_class: 'Debt', units: '10', cost_value: '500', current_value: '600' },
+      { scheme: 'Zero units ignored', isin: 'INF000000000', units: '0', current_value: '0' },
+    ]);
+    expect(holdings).toHaveLength(2);
+    const flexi = holdings.find((h) => h.isin === 'INF179K01608')!;
+    expect(flexi.units).toBe(150); // merged, ISIN upper-cased
+    expect(flexi.invested_amount).toBe(1000); // the 0-cost folio is treated as unknown, not added
+    expect(flexi.current_value).toBe(2850);
+    expect(flexi.nav).toBe(19);
+    const closed = holdings.find((h) => h.scheme_name === 'Some Closed Fund')!;
+    expect(closed.isin).toBeUndefined();
+    expect(closed.asset_class).toBe('Debt');
+  });
+
+  it('forwards the user token as the bearer and parses records', async () => {
+    const seen: { url: string; auth?: string } = { url: '' };
+    const provider = new RoboRupeePortfolioProvider(roboCfg, log);
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      seen.url = String(input);
+      seen.auth = new Headers(init?.headers).get('authorization') ?? undefined;
+      return new Response(JSON.stringify({ success: true, records: [{ scheme: 'A', isin: 'INF000000001', units: '5', cost_value: '100', current_value: '150' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+    try {
+      const holdings = await provider.getHoldings('7', 'user-jwt-token');
+      expect(seen.url).toBe('https://admin.roborupee.com/api/holdings/get');
+      expect(seen.auth).toBe('Bearer user-jwt-token');
+      expect(holdings).toEqual([{ isin: 'INF000000001', scheme_name: 'A', units: 5, current_value: 150, invested_amount: 100 }]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it('turns a 401 from the holdings API into a sign-in message, and never calls out for guests', async () => {
+    const provider = new RoboRupeePortfolioProvider(roboCfg, log);
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => new Response('nope', { status: 401 })) as typeof fetch;
+    try {
+      await expect(provider.getHoldings('7', 'expired')).rejects.toThrow(/sign in/i);
+    } finally {
+      globalThis.fetch = original;
+    }
+    // Guests have no token and must never trigger a holdings request.
+    let called = false;
+    globalThis.fetch = (async () => {
+      called = true;
+      return new Response('{}');
+    }) as typeof fetch;
+    try {
+      expect(await provider.getHoldings('guest:abc', undefined)).toEqual([]);
+      expect(called).toBe(false);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });
 

@@ -1,3 +1,25 @@
+<!--
+  Robo Rupee chat: INLINE version (the dashboard's "Ask AI" card).
+  Answers stream into the card with charts; it scrolls with the page instead of staying fixed to the window.
+
+  How to use
+  1. Paste everything from START to END in place of the dashboard's "Ask AI" card.
+  2. It uses the page's css/style.css for its look and talks to the chat server directly (no embed.js).
+
+  Good to know
+  - It can share a page with chat-floating.html; both continue the same conversation.
+  - The page's address must be in ALLOWED_ORIGINS on the chat server.
+  - Set the chat server's address with data-api="…" on the <script> tag below.
+
+  Signed-in users
+  - Add data-token="THE_JWT" to that same <script data-api="…"> tag. The token is a standard HS256 JWT
+    your server mints with WIDGET_TOKEN_SECRET (user id in the `sub` claim); it greets the user by name
+    and enables "my investments" questions. Omit it for guests. See docs/embed-any-website.md.
+  - The token is safe to place in the page — it is a per-user, short-lived bearer credential and the
+    script only reads its public `sub`/`name` claims. Never put WIDGET_TOKEN_SECRET in this file; that
+    secret stays on your servers. The chat server re-verifies every token, so nothing here needs it.
+-->
+
 <!-- START: Robo Rupee chat (inline) -->
 <div class="gcard dashboard-ask-ai-box w-100 mb-4">
     <div class="gcard-inner p-4">
@@ -64,10 +86,13 @@
   .rrc-donut .rrc-legend { flex: 1 1 140px; margin: 0; }
 </style>
 
-<script data-api="https://mcp-server-ten-eta.vercel.app">
+<script data-api="https://mcp-server-ten-eta.vercel.app" data-token="THE_JWT">
 (function () {
   var me = document.currentScript;
   var API = (me.getAttribute('data-api') || 'https://mcp-server-ten-eta.vercel.app').replace(/\/$/, '');
+  // Signed-in user's token, read from data-token="…" on this <script> tag: a standard HS256 JWT your
+  // server mints with WIDGET_TOKEN_SECRET (user id in `sub`). Empty = guest. Only the per-user token
+  // belongs here, never the secret itself — the chat server verifies it.
   var TOKEN = me.getAttribute('data-token') || '';
 
   // The "Ask AI" card just above this script.

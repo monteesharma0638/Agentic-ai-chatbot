@@ -69,9 +69,13 @@ function tokenClaims(token) {
     // A JWT is header.payload.signature — the claims are the middle (second) segment.
     const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     const bytes = Uint8Array.from(atob(payload), (c) => c.charCodeAt(0));
-    const { sub, name } = JSON.parse(new TextDecoder().decode(bytes));
+    const claims = JSON.parse(new TextDecoder().decode(bytes));
+    // User id is `sub`, or the host app's `user_id` (an object's .user_id, or a scalar).
+    const nested = claims.user_id && typeof claims.user_id === 'object' ? claims.user_id.user_id : claims.user_id;
+    const uid = claims.sub ?? nested ?? 'user';
+    const name = claims.name;
     const first = typeof name === 'string' ? name.trim().split(/\s+/)[0] : '';
-    return { uid: sub ?? 'user', name: first ? first[0].toUpperCase() + first.slice(1) : '' };
+    return { uid: String(uid), name: first ? first[0].toUpperCase() + first.slice(1) : '' };
   } catch {
     return { uid: 'user', name: '' };
   }

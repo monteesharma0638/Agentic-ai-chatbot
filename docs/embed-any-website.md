@@ -98,22 +98,60 @@ From your own JavaScript: `MfChat.open()`, `MfChat.close()`, `MfChat.ask('Compar
 
 ## Logged-in users on a site that isn't Laravel
 
-"My portfolio" questions and greeting people by name need a token proving who is logged in.
-Create it **on your server** for each page view, with the same secret as `WIDGET_TOKEN_SECRET`,
-and print it into the tag as `data-token="…"`. In Node.js:
+"My portfolio" questions and greeting people by name need a token that proves who is logged in.
+The token is a **standard JSON Web Token (JWT), HS256**:
+`base64url(header).base64url(payload).base64url(signature)`, with the user id in the `sub` claim.
+Mint it **on your server** for each page view, signed with the same value as `WIDGET_TOKEN_SECRET`,
+then hand that string to the widget. In Node.js:
 
 ```js
 import { createHmac } from 'node:crypto';
 
-const payload = Buffer.from(
-  JSON.stringify({ uid: String(user.id), name: user.firstName, exp: Math.floor(Date.now() / 1000) + 12 * 3600 }),
-).toString('base64url');
-const token = `${payload}.${createHmac('sha256', process.env.MF_CHAT_SECRET).update(payload).digest('hex')}`;
+const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+const header = b64({ alg: 'HS256', typ: 'JWT' });
+const payload = b64({
+  sub: String(user.id),        // the id every chat + usage row is stored under
+  name: user.firstName,        // optional — only used to greet them
+  exp: Math.floor(Date.now() / 1000) + 12 * 3600,
+});
+const data = `${header}.${payload}`;
+const signature = createHmac('sha256', process.env.WIDGET_TOKEN_SECRET).update(data).digest('base64url');
+const token = `${data}.${signature}`;
 ```
 
-- Never put the secret in browser code.
-- Never let a page cache or CDN store pages that contain a token: every visitor would get the
-  same person's identity. Logged-out visitors get no token and chat as guests.
+### Passing the token to the widget
+
+Use whichever embed you have — pass the `token` string from above:
+
+- **Floating script tag:** add `data-token="<token>"` to the `embed.js` tag, or call
+  `MfChat.init({ token: '<token>' })` from your own JavaScript.
+- **Inline page** ([`html-embed/chat-inline.html`](../html-embed/chat-inline.html)): add
+  `data-token="<token>"` to its `<script data-api="…">` tag — your server renders the token into that
+  attribute (omit it for guests).
+
+### What is and isn't secret
+
+- The **token** is a bearer credential meant to live in the browser — putting it in `data-token` (or the
+  inline page's `TOKEN`) is exactly its job. It is per-user and short-lived (set `exp`).
+- The widget base64-decodes only the middle (payload) segment, to read the public `sub`/`name` claims so it
+  can greet the user and keep each person's saved conversation separate. It does **not** verify the token and
+  **never sees the signing secret** — the secret is not part of the token, only a signature computed from it is.
+- Your **`WIDGET_TOKEN_SECRET`** signs and verifies tokens. Keep it only on your servers — never in `embed.js`,
+  the inline HTML, a `data-` attribute, or any other file sent to the browser.
+- The agent-service re-verifies every token server-side (signature, HS256, expiry) and trusts only the `sub`
+  it recovers there, so a token edited in the browser is rejected no matter what the page displayed.
+- Never let a page cache or CDN store pages that contain a token: every visitor would get the same person's
+  identity. Logged-out visitors get no token and chat as guests.
+
+### A quick token for testing
+
+To try signed-in mode without wiring up your signing server, mint a demo token with the shared secret:
+
+- From the repo root (after `npm run build`):
+  `npm run -s token -w agent-service -- demo-user "Asha"` prints a JWT (valid 1 hour) for user id
+  `demo-user`. Paste it as `data-token`.
+- Or, with the playground enabled, open `/playground` (it signs test tokens for any id), or fetch
+  `GET /dev/token?uid=demo-user` from the running service.
 
 ## If it doesn't work
 

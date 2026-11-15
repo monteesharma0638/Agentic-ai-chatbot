@@ -85,7 +85,12 @@ The user attached one or more files to this message (for example a screenshot, a
   }
   context.push(
     hasPortfolio
-      ? '- Use get_my_portfolio for any question about "my portfolio / my investments / my funds / my SIPs".'
+      ? '- You CAN see the signed-in user\'s own holdings. Call get_my_portfolio for any question about "my portfolio / my ' +
+        'investments / my funds / my SIPs", and also whenever answering well needs their actual holdings — their current ' +
+        'value or gain, how their money is split (equity/debt, by fund or AMC), whether they are over- or under-exposed ' +
+        'somewhere, how a fund they own has done, or planning that should account for what they already hold. Read it first, ' +
+        'then answer from it. Keep to "suggest, never recommend": you may point out facts about their portfolio (concentration, ' +
+        'overlap, allocation) and options to consider, but never tell them to buy, sell or switch a specific fund.'
       : "- The user's holdings are not available here. If they ask about them, say you cannot see their portfolio in this chat.",
   );
   if (page?.scheme_code) {

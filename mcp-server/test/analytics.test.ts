@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { projectCorpus, simulateLumpsum, simulateSip, xirr } from '../src/analytics/investments.js';
 import { cagr, calendarYearReturns, rollingReturns, trailingReturns } from '../src/analytics/returns.js';
 import { maxDrawdown, riskMetrics } from '../src/analytics/risk.js';
-import { parseNavAll } from '../src/data/amfi.js';
+import { indexByIsin, parseNavAll } from '../src/data/amfi.js';
 import { NavSeries } from '../src/data/navSeries.js';
 import { searchSchemes } from '../src/data/search.js';
 import { addMonths, dayToIso, isoToDay, parseDateArg } from '../src/lib/dates.js';
@@ -183,6 +183,14 @@ describe('AMFI parsing and search', () => {
     expect(schemes[1].isGrowth).toBe(false);
     expect(schemes[3].category).toBe('Equity Scheme - Mid Cap Fund');
     expect(schemes[4].nav).toBeNull();
+  });
+
+  it('indexes schemes by both growth and reinvestment ISINs', () => {
+    const byIsin = indexByIsin(schemes);
+    expect(byIsin.get('INF879O01027')?.code).toBe(122639); // growth ISIN
+    expect(byIsin.get('INF879O01308')?.code).toBe(153964); // reinvestment ISIN
+    expect(byIsin.get('INF179K01XQ0')?.code).toBe(118989);
+    expect(byIsin.has('-')).toBe(false); // placeholder dashes are not indexed
   });
 
   it('fuzzy search prefers Direct Growth and handles spelling variants', () => {

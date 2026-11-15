@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import type { MfAgent } from '../agent/agent.js';
 import { ChatBodySchema, type AgentEvent, type ChatUser } from '../agent/types.js';
-import { signUserToken, verifyUserToken } from '../auth/userToken.js';
+import { decodeUserToken, signUserToken, verifyUserToken } from '../auth/userToken.js';
 import { isProduction, type AppConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import type { McpHub } from '../mcp/hub.js';
@@ -41,6 +41,13 @@ function parseTrustProxy(value: string): string | number | boolean {
   if (value === 'true') return true;
   if (value === 'false') return false;
   return /^\d+$/.test(value) ? Number(value) : value;
+}
+
+/** Constant-time string comparison (avoids leaking the configured token via timing). */
+function safeEqual(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ba.length === bb.length && timingSafeEqual(ba, bb);
 }
 
 declare module 'express-serve-static-core' {
@@ -87,16 +94,33 @@ export function createApp(deps: {
   const identify = (req: Request, res: Response, next: NextFunction) => {
     const auth = req.headers.authorization;
     if (auth?.startsWith('Bearer ')) {
+      const token = auth.slice(7).trim();
+      // Dev/playground only: a token the operator pre-loaded in PLAYGROUND_USER_TOKEN is trusted as-is
+      // (decoded, not signature-verified), so a real host-app JWT can be used in the playground without
+      // putting the host's signing secret in this env. Never active in production.
+      if (config.PLAYGROUND_USER_TOKEN && !isProduction(config) && safeEqual(token, config.PLAYGROUND_USER_TOKEN)) {
+        const trusted = decodeUserToken(token);
+        if (!trusted.ok) {
+          return void res.status(401).json({
+            error: trusted.reason === 'expired' ? 'token_expired' : 'invalid_token',
+            message: 'Your session has timed out. Refresh the page to keep chatting.',
+          });
+        }
+        const { uid, name, risk, userType } = trusted.claims;
+        req.chatUser = { id: uid, name, risk_profile: risk, guest: false, user_type: userType, token };
+        return next();
+      }
       if (!config.WIDGET_TOKEN_SECRET) return void res.status(401).json({ error: 'tokens_not_enabled' });
-      const result = verifyUserToken(auth.slice(7).trim(), config.WIDGET_TOKEN_SECRET);
+      const result = verifyUserToken(token, config.WIDGET_TOKEN_SECRET);
       if (!result.ok) {
         return void res.status(401).json({
           error: result.reason === 'expired' ? 'token_expired' : 'invalid_token',
           message: 'Your session has timed out. Refresh the page to keep chatting.',
         });
       }
-      const { uid, name, risk } = result.claims;
-      req.chatUser = { id: uid, name, risk_profile: risk, guest: false };
+      const { uid, name, risk, userType } = result.claims;
+      // Keep the verified token so the portfolio provider can read this user's own holdings from the host app.
+      req.chatUser = { id: uid, name, risk_profile: risk, guest: false, user_type: userType, token };
       return next();
     }
     const visitor = req.header('x-visitor-id');
@@ -281,6 +305,10 @@ export function createApp(deps: {
     app.get('/playground', playgroundAuth, (_req, res) => res.sendFile(PLAYGROUND_FILE));
     /** Mints a signed user token exactly like the Blade snippet does, for testing. */
     app.get('/dev/token', playgroundAuth, (req, res) => {
+      // A pre-loaded real host-app token wins, so the playground signs in as that exact user.
+      if (config.PLAYGROUND_USER_TOKEN) {
+        return void res.json({ token: config.PLAYGROUND_USER_TOKEN, note: 'using PLAYGROUND_USER_TOKEN (host-app JWT)' });
+      }
       if (!config.WIDGET_TOKEN_SECRET) return void res.json({ token: null, note: 'WIDGET_TOKEN_SECRET not set; guest mode only' });
       const uid = String(req.query.uid ?? 'demo-user').slice(0, 64);
       const name = req.query.name ? String(req.query.name).slice(0, 60) : undefined;
