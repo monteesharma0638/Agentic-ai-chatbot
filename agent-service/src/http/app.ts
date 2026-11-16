@@ -95,10 +95,11 @@ export function createApp(deps: {
     const auth = req.headers.authorization;
     if (auth?.startsWith('Bearer ')) {
       const token = auth.slice(7).trim();
-      // Dev/playground only: a token the operator pre-loaded in PLAYGROUND_USER_TOKEN is trusted as-is
+      // Playground only: a token the operator pre-loaded in PLAYGROUND_USER_TOKEN is trusted as-is
       // (decoded, not signature-verified), so a real host-app JWT can be used in the playground without
-      // putting the host's signing secret in this env. Never active in production.
-      if (config.PLAYGROUND_USER_TOKEN && !isProduction(config) && safeEqual(token, config.PLAYGROUND_USER_TOKEN)) {
+      // putting the host's signing secret in this env. Tied to the playground kill-switch: it stops working
+      // the moment ENABLE_PLAYGROUND is false, so turning the playground off before launch also disables this.
+      if (config.PLAYGROUND_USER_TOKEN && config.ENABLE_PLAYGROUND && safeEqual(token, config.PLAYGROUND_USER_TOKEN)) {
         const trusted = decodeUserToken(token);
         if (!trusted.ok) {
           return void res.status(401).json({
@@ -271,7 +272,9 @@ export function createApp(deps: {
       return void res.status(503).type('text/plain').send('// embed.js not built yet: run `npm run build -w widget`');
     }
     res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=300');
+    // Revalidate every load (cheap 304 when unchanged) so a redeploy's new widget shows up immediately
+    // instead of being masked by a stale cached copy for up to the max-age.
+    res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Vary', 'Accept-Encoding');
     const gzPath = `${embedPath}.gz`;

@@ -91,10 +91,11 @@ const EnvSchema = z.object({
   /** Protects /playground and /dev/token with a browser login (any username). Required in production. */
   PLAYGROUND_PASSWORD: z.string().optional(),
   /**
-   * Dev/playground only: a ready-made user JWT (e.g. a real host-app token). `/dev/token` serves it and
-   * the identity layer trusts this exact string verbatim, without a signature check, so the real host-app
-   * token can be used in the playground without putting the host's signing secret in this env. IGNORED in
-   * production — never set it there.
+   * Playground only: a ready-made user JWT (e.g. a real host-app token). `/dev/token` serves it and the
+   * identity layer trusts this exact string verbatim, without a signature check, so the real host-app token
+   * can be used in the playground without putting the host's signing secret in this env. Active only while
+   * ENABLE_PLAYGROUND is true (works on any deploy, including production) — turning the playground off for
+   * launch disables it too. Leave it unset once real per-user tokens verify via WIDGET_TOKEN_SECRET.
    */
   PLAYGROUND_USER_TOKEN: z.string().optional(),
 

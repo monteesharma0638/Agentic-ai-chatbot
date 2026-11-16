@@ -479,34 +479,41 @@ describe('deployment building blocks (Vercel / VPS)', () => {
     }
   });
 
-  it('signs the playground in as a pre-loaded host-app token (trusted verbatim, dev only)', async () => {
+  it('trusts a pre-loaded host-app token only while the playground is enabled', async () => {
     // A real host-app JWT signed with a secret this service does NOT hold.
     const hostToken = `${Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')}.${Buffer.from(
       JSON.stringify({ user_id: { user_id: 1, user_type: 'advisor' }, exp: Math.floor(Date.now() / 1000) + 3600 }),
     ).toString('base64url')}.not-a-real-signature`;
-    const pgConfig = loadConfig({
-      GEMINI_API_KEY: 'x',
-      WIDGET_TOKEN_SECRET: SECRET,
-      ENABLE_PLAYGROUND: 'true',
-      PLAYGROUND_USER_TOKEN: hostToken,
-    });
-    const store = new MemoryStore(60_000);
-    const agent = new MfAgent({ model: new FakeModel([]), hub, store, usage: usage(), config: pgConfig, log });
-    const server = createApp({ agent, hub, store, usage: usage(), config: pgConfig, log }).listen(0);
-    await new Promise((r) => server.once('listening', r));
-    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const serve = (enablePlayground: boolean) => {
+      const cfg = loadConfig({
+        GEMINI_API_KEY: 'x',
+        WIDGET_TOKEN_SECRET: SECRET,
+        ENABLE_PLAYGROUND: String(enablePlayground),
+        PLAYGROUND_USER_TOKEN: hostToken,
+      });
+      const store = new MemoryStore(60_000);
+      const agent = new MfAgent({ model: new FakeModel([]), hub, store, usage: usage(), config: cfg, log });
+      return createApp({ agent, hub, store, usage: usage(), config: cfg, log }).listen(0);
+    };
+
+    const on = serve(true);
+    const off = serve(false);
+    await Promise.all([on, off].map((s) => new Promise((r) => s.once('listening', r))));
+    const onUrl = `http://127.0.0.1:${(on.address() as AddressInfo).port}`;
+    const offUrl = `http://127.0.0.1:${(off.address() as AddressInfo).port}`;
     try {
-      // /dev/token hands back the configured host token verbatim.
-      const served = (await (await fetch(`${url}/dev/token?uid=ignored`)).json()) as { token: string };
+      // Playground on: /dev/token hands back the configured host token verbatim...
+      const served = (await (await fetch(`${onUrl}/dev/token?uid=ignored`)).json()) as { token: string };
       expect(served.token).toBe(hostToken);
-      // identify trusts that exact token (reaches the route → 404, not 401).
-      const ok = await fetch(`${url}/api/conversations/abc12345`, { headers: { Authorization: `Bearer ${hostToken}` } });
-      expect(ok.status).toBe(404);
+      // ...and identify trusts that exact token (reaches the route → 404, not 401) even without its real secret.
+      expect((await fetch(`${onUrl}/api/conversations/abc12345`, { headers: { Authorization: `Bearer ${hostToken}` } })).status).toBe(404);
       // Any OTHER unsigned token is still rejected.
-      const bad = await fetch(`${url}/api/conversations/abc12345`, { headers: { Authorization: `Bearer ${hostToken}tampered` } });
-      expect(bad.status).toBe(401);
+      expect((await fetch(`${onUrl}/api/conversations/abc12345`, { headers: { Authorization: `Bearer ${hostToken}x` } })).status).toBe(401);
+      // Playground off: the same token is no longer trusted (normal signature check fails → 401).
+      expect((await fetch(`${offUrl}/api/conversations/abc12345`, { headers: { Authorization: `Bearer ${hostToken}` } })).status).toBe(401);
     } finally {
-      server.close();
+      on.close();
+      off.close();
     }
   });
 
