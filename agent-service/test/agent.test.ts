@@ -425,6 +425,12 @@ describe('deployment building blocks (Vercel / VPS)', () => {
     expect(() => loadConfig({ ...base, PLAYGROUND_PASSWORD: 'short' })).toThrow(/12 characters/);
   });
 
+  it('accepts a short WIDGET_TOKEN_SECRET (must match the host signer, even if under 32 chars)', () => {
+    // The host app may sign with a short secret; we must use the same value, so this warns but does not throw.
+    const cfg = loadConfig({ GEMINI_API_KEY: 'x', WIDGET_TOKEN_SECRET: 'short-secret' });
+    expect(cfg.WIDGET_TOKEN_SECRET).toBe('short-secret');
+  });
+
   it('serves a public playground when no password is set', async () => {
     const pgConfig = loadConfig({
       GEMINI_API_KEY: 'x',

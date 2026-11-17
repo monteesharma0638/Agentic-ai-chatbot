@@ -21,7 +21,7 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().default(3000),
   LOG_LEVEL: z.string().default('info'),
 
-  /** Secret shared with the website that signs user tokens (min 32 chars). */
+  /** Secret shared with the website that signs user tokens; must match that signer (32+ chars recommended). */
   WIDGET_TOKEN_SECRET: z.string().optional(),
   /** Allow chatting without a signed token (guests, identified by a random browser id). */
   ALLOW_ANONYMOUS: bool,
@@ -138,7 +138,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
   const cfg = parsed.data;
   if (cfg.WIDGET_TOKEN_SECRET && cfg.WIDGET_TOKEN_SECRET.length < 32) {
-    throw new Error('WIDGET_TOKEN_SECRET must be at least 32 characters.');
+    // Not fatal: WIDGET_TOKEN_SECRET must equal the host app's own token-signing secret to verify its JWTs,
+    // and that secret may be shorter than 32 chars. A short HS256 secret is easier to brute-force, so warn.
+    console.warn(
+      `[config] WIDGET_TOKEN_SECRET is only ${cfg.WIDGET_TOKEN_SECRET.length} characters — it must match the secret ` +
+        'your host app signs tokens with; 32+ characters is strongly recommended for HS256.',
+    );
   }
   if (!cfg.WIDGET_TOKEN_SECRET && !cfg.ALLOW_ANONYMOUS) {
     throw new Error('Set WIDGET_TOKEN_SECRET (signed-in users) and/or ALLOW_ANONYMOUS=true (guests).');
