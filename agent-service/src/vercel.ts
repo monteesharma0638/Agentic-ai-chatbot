@@ -22,10 +22,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   try {
     ({ app } = await getRuntime());
   } catch (err) {
-    logger.error({ err: (err as Error).message }, 'startup failed (check the environment variables in Vercel)');
+    const message = (err as Error).message ?? String(err);
+    logger.error({ err: message }, 'startup failed (check the environment variables in Vercel)');
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ error: 'startup_failed' }));
+    // Readable cross-origin so the reason is visible in the browser/curl, not masked as a CORS error.
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Surface the reason (a config/boot error, e.g. a missing env var) so the operator can see it without
+    // digging through Vercel logs. This only ever fires while the function cannot start.
+    res.end(JSON.stringify({ error: 'startup_failed', message }));
     return;
   }
   // Resolve only when the response is done, so streamed (SSE) replies aren't cut short.
